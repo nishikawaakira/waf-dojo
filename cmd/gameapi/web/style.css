@@ -56,7 +56,8 @@ button.primary { background: var(--accent); color: #04121f; border-color: var(--
 button.danger { border-color: var(--warn); color: var(--warn); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 
-main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; }
+/* 下の余白は、右下のまもりんにページの最後が隠れないようにするため */
+main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 160px; }
 
 h1 { font-size: 1.6rem; margin: 0 0 8px; }
 h2 { font-size: 1.2rem; margin: 32px 0 12px; }
@@ -200,6 +201,3 @@ tr.me td { background: rgba(79, 179, 255, .08); }
 .warn { color: var(--warn); }
 .spectator { border-color: var(--warn); color: var(--warn); }
 .acl-info .name-prefix { flex-basis: 100%; font-size: .85rem; }
-
-/* 作成者の表示。右下のまもりんに隠れないよう、下に余白をとる */
-.site-footer { text-align: center; color: var(--muted); font-size: .8rem; padding: 24px 16px 140px; border-top: 1px solid var(--border); }

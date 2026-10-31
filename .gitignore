@@ -1,0 +1,9 @@
+build/
+terraform/.terraform/
+terraform/*.tfstate*
+terraform/terraform.tfvars
+.DS_Store
+# ローカルで go build したときにできる実行ファイル
+/targetapp
+/trafficgen
+/gameapi

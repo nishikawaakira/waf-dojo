@@ -1,0 +1,17 @@
+# cp terraform.tfvars.example terraform.tfvars して編集する
+# (terraform.tfvars がなければ、terraform apply のときにプレイ人数を聞かれる)
+
+region = "ap-northeast-1"
+
+# プレイ人数。player1, player2, ... が作られ、1 人につき ALB と Web ACL が 1 つずつ作られる
+player_count = 1
+
+# プレイヤー名を自分で決めたいときは、player_count の代わりに指定する
+# players = ["alice", "bob", "carol"]
+
+# 各プレイヤーに、自分の Web ACL しか触れない IAM ユーザー (コンソール用) を作る
+# (組織のルールで IAM ユーザーを作れない場合は false にする)
+# create_player_users = true
+
+# ゲーム画面全体にパスコードをかけたいときに設定する
+# game_passcode = "change-me"

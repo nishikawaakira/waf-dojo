@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- まもりん (柴犬の道場生) の顔を、小さいサイズでも見分けやすいように単純化したもの -->
+  <path d="M8 26 L13 3 L28 17 Z" fill="#e8913a"/>
+  <path d="M56 26 L51 3 L36 17 Z" fill="#e8913a"/>
+  <path d="M12 22 L15 9 L23 17 Z" fill="#fbd3a5"/>
+  <path d="M52 22 L49 9 L41 17 Z" fill="#fbd3a5"/>
+  <ellipse cx="32" cy="36" rx="27" ry="24" fill="#f2a65a"/>
+  <ellipse cx="32" cy="46" rx="18" ry="13" fill="#fff6ea"/>
+  <rect x="6" y="20" width="52" height="7" rx="3.5" fill="#e63946"/>
+  <circle cx="22" cy="36" r="3.6" fill="#2b2d42"/>
+  <circle cx="42" cy="36" r="3.6" fill="#2b2d42"/>
+  <ellipse cx="32" cy="43" rx="3.6" ry="2.6" fill="#2b2d42"/>
+  <path d="M27 47.5 q5 4.5 10 0" stroke="#2b2d42" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  <ellipse cx="15" cy="44" rx="4" ry="2.6" fill="#ff8fa3" opacity=".6"/>
+  <ellipse cx="49" cy="44" rx="4" ry="2.6" fill="#ff8fa3" opacity=".6"/>
+</svg>

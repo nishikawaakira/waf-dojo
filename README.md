@@ -1,255 +1,253 @@
-# WAF Dojo (wafdy)
+# WAF Dojo
 
-> **管理者の方へ**: 環境の作り方・参加者への配り方・運用・片付けは [管理者ガイド (docs/ADMIN.md)](docs/ADMIN.md) に、参加者に配る説明は [プレイヤー向けのはじめ方 (docs/PLAYER_GUIDE.md)](docs/PLAYER_GUIDE.md) にまとめています。
+**English** | [日本語](README.ja.md)
 
-AWS WAF を「攻撃を受けながら」学ぶための学習環境です。
+> **For administrators**: how to build the environment, hand it out to participants, run it, and clean up is covered in the [Admin guide (docs/ADMIN.md)](docs/ADMIN.md), and the handout for participants is [Getting started for players (docs/PLAYER_GUIDE.md)](docs/PLAYER_GUIDE.md). Both guides are currently in Japanese.
 
-1. **チュートリアル**: これから来る攻撃の中身（リクエスト例）と設定手順が画面に出るので、それを見ながら Web ACL を設定します。
-2. **ゲームモード**: チュートリアルをクリアすると解放されます。攻撃の概要だけが説明されるので、防ぐためのルールを自分で考えて設定します。
-3. **スコア**: 攻撃をどれだけブロックできたか、一般ユーザーをどれだけ誤ってブロックしたかで採点し、ランキングに表示します。
+A hands-on environment for learning AWS WAF **while under attack**.
 
-一人でも、複数人で競っても遊べます。
+1. **Tutorials**: The screen shows what the incoming attack looks like (sample requests) and step-by-step setup instructions. You configure your Web ACL while following along.
+2. **Game mode**: Unlocked once you clear the tutorials. Only an outline of the attack is given, and you design the rules to stop it yourself.
+3. **Score**: You are scored on how many attacks you blocked and how many regular users you blocked by mistake, and the results go on a leaderboard.
 
-## デモ
+Play solo or compete with others.
 
-![WAF Dojo のデモ](docs/demo.gif)
+## Demo
 
-チュートリアルで攻撃と手順を確認し、脆弱性対応ラボでルールを考えて攻撃を開始、採点と模範解答を見るまでの流れです（約 1 分）。高画質版は [docs/demo.mp4](docs/demo.mp4) をご覧ください。
+![WAF Dojo demo](docs/demo-en.gif)
 
-> 画面は開発モード (`make dev`) で撮影しています。開発モードでは本物の AWS WAF の代わりに模範解答で採点します。
+The flow from reading a tutorial's attack and steps, to designing a rule in a vulnerability lab, launching the attack, and reviewing the score and model answer (about 1 minute). A higher-quality version is at [docs/demo-en.mp4](docs/demo-en.mp4).
 
-## 構成
+> Recorded in development mode (`make dev`), which scores with the model answer instead of a real AWS WAF.
+
+## Architecture
 
 ```
-                    ┌─────────────── プレイヤーごと ───────────────┐
-ブラウザ ── Lambda Function URL (gameapi: 画面 + API)               │
-                │  非同期呼び出し                                   │
-                ▼                                                   │
-          Lambda (trafficgen) ── HTTPS ─▶ ALB ◀── Web ACL (プレイヤーが編集)
-                │                          │                        │
-                │                          ▼                        │
-                │                  Lambda (targetapp: ダミーの EC サイト)
-                ▼                   └───────────────────────────────┘
-            DynamoDB（実行結果・ベストスコア・ロック）
+                    ┌───────────────────── per player ──────────────────┐
+Browser ── Lambda Function URL (gameapi: UI + API)                      │
+                │  async invoke                                          │
+                ▼                                                        │
+          Lambda (trafficgen) ── HTTPS ─▶ ALB ◀── Web ACL (edited by the player)
+                │                          │                             │
+                │                          ▼                             │
+                │                  Lambda (targetapp: dummy online shop) │
+                ▼                   └────────────────────────────────────┘
+            DynamoDB (runs, best scores, locks)
 ```
 
-- **targetapp**: どのリクエストにも 200 を返すダミーアプリ。4xx が返ってきたら WAF がブロックしたと判定できます。
-- **trafficgen**: シナリオどおりに攻撃リクエストと一般ユーザーのリクエストを混ぜて送り、結果を採点します。送信先は Terraform が設定した**自分の ALB だけ**です。
-  [uTLS](https://github.com/refraction-networking/utls) を使って、ブラウザ (Chrome / Firefox / Safari) と攻撃ツールで TLS の ClientHello を作り分けているので、JA4 フィンガープリントで見分ける練習ができます。
-- **gameapi**: ゲーム画面と API。Lambda Function URL で公開します。
-- ALB には Web ACL を 1 つしか付けられないので、プレイヤーごとに ALB と Web ACL を 1 つずつ作ります。
-- CloudFront の Body の検査上限 (既定 16 KB・最大 64 KB) を体験するため、プレイヤーごとに CloudFront と CloudFront 用の Web ACL (`wafdy-<名前>-cf`、us-east-1) も作ります。CloudFront の後ろには ALB ではなくダミーアプリ (Lambda Function URL) を直接つなぐので、ALB 側の Web ACL のルールは効きません。`enable_cloudfront = false` で作らないようにもできます。
-- JA4 は HTTPS でしか計算されないため、ALB は HTTPS (443) で受けます。ドメインがなくても動くように、自己署名証明書を作って ACM にインポートしています（秘密鍵は Terraform の state に入ります）。
-- 送信元 IP は、ドキュメント用の IP アドレス (RFC 5737) を `X-Forwarded-For` に入れて表現しています（「CDN の後ろにあるサイト」という設定）。
+- **targetapp**: A dummy app that returns 200 to every request, so any 4xx means WAF blocked it.
+- **trafficgen**: Sends a mix of attack requests and regular-user requests according to the scenario, then scores the result. It only sends to **the player's own ALB**, as configured by Terraform.
+  It uses [uTLS](https://github.com/refraction-networking/utls) to craft different TLS ClientHellos for browsers (Chrome / Firefox / Safari) and attack tools, so you can practice telling them apart by JA4 fingerprint.
+- **gameapi**: The game UI and API, served from a Lambda Function URL.
+- An ALB can only have one Web ACL, so each player gets their own ALB and Web ACL.
+- To experience CloudFront's body inspection limit (16 KB by default, up to 64 KB), each player also gets a CloudFront distribution and a CloudFront-scoped Web ACL (`wafdy-<name>-cf`, us-east-1). CloudFront fronts the dummy app's Lambda Function URL directly rather than the ALB, so the ALB's Web ACL rules do not apply there. Set `enable_cloudfront = false` to skip it.
+- JA4 is only computed over HTTPS, so the ALB listens on HTTPS (443). To work without a domain, a self-signed certificate is generated and imported into ACM (its private key ends up in the Terraform state).
+- Source IPs are represented by documentation addresses (RFC 5737) in `X-Forwarded-For` (the site is assumed to sit behind a CDN).
 
-## シナリオ
+## Scenarios
 
-### チュートリアル（手順つき・すべてクリアでゲーム解放）
+### Tutorials (with steps; clear them all to unlock the game)
 
-| ID | 内容 | 学べること |
+| ID | Topic | What you learn |
 |---|---|---|
-| tutorial-1-sqli | SQL インジェクション | マネージドルールグループ |
-| tutorial-2-xss | 口コミ欄への XSS | カスタムルール (Rule builder)、Body の検査、テキスト変換 |
-| tutorial-3-ipset | 攻撃者リストの IP | IP セット、CIDR、X-Forwarded-For |
-| tutorial-4-useragent | 脆弱性スキャナー | ヘッダーの文字列マッチ、OR ステートメント、Lowercase 変換 |
-| tutorial-5-ratelimit | 単一 IP からの大量アクセス | レートベースルール、集計キー |
-| tutorial-6-ja4 | ブラウザを名乗るスクレイピングツール | JA4 フィンガープリントの仕組みと読み方 (a_b_c)、JA4 の完全一致、WAF ログの分析 |
+| tutorial-1-sqli | SQL injection | Managed rule groups |
+| tutorial-2-xss | XSS in the review form | Custom rules (Rule builder), body inspection, text transformations |
+| tutorial-3-ipset | IPs on a threat list | IP sets, CIDR, X-Forwarded-For |
+| tutorial-4-useragent | Vulnerability scanners | String match on headers, OR statements, lowercase transformation |
+| tutorial-5-ratelimit | Floods from a single IP | Rate-based rules, aggregation keys |
+| tutorial-6-ja4 | A scraper posing as a browser | How JA4 fingerprints work and how to read them (a_b_c), exact JA4 match, WAF log analysis |
 
-### ゲームモード（手順なし・応用）
+### Game mode (no steps; applied skills)
 
-| ID | 内容 | 学べること |
+| ID | Topic | What you learn |
 |---|---|---|
-| game-1-fakebot | Googlebot を名乗るスクレイパー | AND / NOT の組み合わせ（UA が Googlebot かつ Google の IP ではない） |
-| game-2-admin | 管理画面への外部アクセス | URI パスの条件 + IP 許可リスト、大文字小文字 |
-| game-3-traversal | パストラバーサル | テキスト変換の重ねがけ（二重デコード）、誤検知への配慮 |
-| game-4-cms | XSS ルールが編集者を止めてしまう | 例外の作り方、ルールの優先度、既存ルールの見直し |
-| game-5-bruteforce | ログインの総当たり + 社内 NAT | スコープダウンステートメント、しきい値の設計 |
-| game-6-ja4regex | JA4 を少しずつ変えるボット軍団 + 同じライブラリを使う取引先 | JA4 の正規表現（共通する b 部分をとらえる）、未観測の亜種への備え、AND NOT による例外 |
+| game-1-fakebot | A scraper posing as Googlebot | Combining AND / NOT (UA says Googlebot AND the IP is not Google's) |
+| game-2-admin | External access to the admin panel | URI path conditions + IP allow list, case sensitivity |
+| game-3-traversal | Path traversal | Stacking text transformations (double decoding), avoiding false positives |
+| game-4-cms | An XSS rule that blocks your editors | Building exceptions, rule priority, revisiting existing rules |
+| game-5-bruteforce | Login brute force + corporate NAT | Scope-down statements, threshold design |
+| game-6-ja4regex | A bot army that keeps tweaking its JA4 + a partner using the same library | JA4 regular expressions (catching the shared b part), preparing for unseen variants, exceptions with AND NOT |
 
-チュートリアルで作ったルールはそのまま残るので、ゲームモードではそれが誤ブロックの原因になる場面もあります（ステージ 4・5）。新しい攻撃を止めるだけでなく、既存ルールの見直しも求められます。
+Rules you created in the tutorials stay in place, so in game mode they sometimes cause false positives (stages 4 and 5). You need to revisit existing rules, not just stop new attacks.
 
-### 脆弱性対応ラボ（全 41 問・手順なし）
+### Vulnerability labs (41 challenges, no steps)
 
-「〜という脆弱性が出ました。こういう条件で防げるようです。ルールを作ってください」という形の問題です。新しい脆弱性が出たときに、自分でルールを作れるようになることを目標にしています。一度挑戦すると、模範解答のルール JSON（コンソールの Rule JSON editor にそのまま貼り付けられる形）と解説が見られます。Level 2・3 の多くの問題には「ありがちな失敗ルール」とその理由も付いています。
+Each challenge reads: "A new vulnerability is out. It can be blocked under these conditions. Write the rule." The goal is to be able to write your own rules whenever a new vulnerability appears. After one attempt you can see the model-answer rule JSON (ready to paste into the console's Rule JSON editor) and an explanation. Many Level 2 and 3 challenges also include a "common pitfall" rule and why it fails.
 
-| レベル | 内容 | 問題 |
+| Level | Content | Challenges |
 |---|---|---|
-| Level 1: 勧告どおりに書く | 検査対象・照合方法・文字列まで書かれた防ぎ方の情報を、正確にルールにする | Log4Shell, Spring4Shell, Shellshock, Confluence OGNL, F5 BIG-IP iControl REST, Next.js middleware bypass, Apache HTTP Server traversal, Text4Shell, Metabase GeoJSON (CVE-2021-41277), ProxyLogon (CVE-2021-26855), Confluence Velocity (CVE-2023-22527) |
-| Level 2: 勧告を WAF に翻訳する | 文章の条件から、検査対象・テキスト変換・照合方法を自分で選ぶ | PHP-CGI (CVE-2024-4577), Citrix ADC, FortiOS SSL-VPN, WebLogic console, Confluence setup, Spring Cloud Function, Struts 2 S2-045, vCenter vROps, XXE, GraphQL introspection, ProxyNotShell, CRLF injection, X-Original-URL, F5 BIG-IP TMUI (CVE-2020-5902), TeamCity (CVE-2024-27198) |
-| Level 3: PoC から自分で導く | 防ぎ方の情報なし。攻撃の本質を見抜き、亜種と誤検知の両方に備える | 難読化 Log4Shell, SSRF (メタデータ), SSTI, OS コマンドインジェクション, Prototype pollution, オープンリダイレクト, ファイルアップロード, PAN-OS GlobalProtect (CVE-2024-3400), 勧告の原文を読む: Ivanti Connect Secure (CVE-2023-46805 / CVE-2024-21887), GitLab (CVE-2023-7028) |
-| Level 4: マネージドルールと WAF の限界 | マネージドルールが正規の通信を止めたとき、保護を保ったまま直す (ルール単位の Count 上書き + ラベル一致)。Body の検査上限のような WAF そのものの限界に備える | Core rule set の SizeRestrictions_BODY (大きなアップロード), NoUserAgent_HEADER (IoT 機器), GenericRFI_QUERYARGUMENTS (社内の Webhook ツール), 8 KB の壁 (Body の検査上限と Oversize handling。ALB は 8 KB 固定)、CloudFront で 16 KB の壁を 64 KB まで広げる (プレイヤー専用の CloudFront で実際に体験) |
+| Level 1: Follow the advisory | Turn guidance that spells out what to inspect, how to match, and the exact strings into a precise rule | Log4Shell, Spring4Shell, Shellshock, Confluence OGNL, F5 BIG-IP iControl REST, Next.js middleware bypass, Apache HTTP Server traversal, Text4Shell, Metabase GeoJSON (CVE-2021-41277), ProxyLogon (CVE-2021-26855), Confluence Velocity (CVE-2023-22527) |
+| Level 2: Translate the advisory into WAF | Choose the inspected component, transformations, and match type yourself from prose conditions | PHP-CGI (CVE-2024-4577), Citrix ADC, FortiOS SSL-VPN, WebLogic console, Confluence setup, Spring Cloud Function, Struts 2 S2-045, vCenter vROps, XXE, GraphQL introspection, ProxyNotShell, CRLF injection, X-Original-URL, F5 BIG-IP TMUI (CVE-2020-5902), TeamCity (CVE-2024-27198) |
+| Level 3: Derive it from the PoC | No mitigation guidance. Find the essence of the attack and prepare for both variants and false positives | Obfuscated Log4Shell, SSRF (metadata), SSTI, OS command injection, prototype pollution, open redirect, file upload, PAN-OS GlobalProtect (CVE-2024-3400), reading original advisories: Ivanti Connect Secure (CVE-2023-46805 / CVE-2024-21887), GitLab (CVE-2023-7028) |
+| Level 4: Managed rules and WAF's limits | When a managed rule blocks legitimate traffic, fix it while keeping protection (per-rule Count override + label match). Prepare for WAF's own limits such as the body inspection limit | Core rule set SizeRestrictions_BODY (large uploads), NoUserAgent_HEADER (IoT devices), GenericRFI_QUERYARGUMENTS (an internal webhook tool), the 8 KB wall (body inspection limit and oversize handling; fixed at 8 KB on ALB), extending CloudFront's 16 KB wall to 64 KB (experienced live on the player's own CloudFront) |
 
-問題を通して身につくこと:
+What the challenges build:
 
-- 攻撃の本質を見抜く（PoC の目立つ部分ではなく、攻撃に欠かせない部分をとらえる）
-- 検査対象の選び方（URI パス / クエリ / 特定パラメータ / 特定ヘッダー / すべてのヘッダー / Body）
-- 正規化（URL decode の重ねがけ、Lowercase、NORMALIZE_PATH、JS_DECODE）
-- 照合方法（前方一致・正規表現・サイズでのヘッダーの有無・許可リスト）
-- ベンダーの緩和策の移植（AWS WAF の正規表現は先読みに対応していない、など）
-- 誤検知の回避（`__typename`、`/mgmt-news`、`${name}` のような「似ているが正規」の通信が各問題に入っています）
+- Seeing the essence of an attack (targeting the part the attack cannot do without, not the eye-catching part of the PoC)
+- Choosing what to inspect (URI path / query / a specific parameter / a specific header / all headers / body)
+- Normalization (stacked URL decoding, lowercase, NORMALIZE_PATH, JS_DECODE)
+- Match types (starts-with, regex, header presence via size, allow lists)
+- Porting vendor mitigations (for example, AWS WAF regex does not support lookahead)
+- Avoiding false positives (every challenge includes look-alike legitimate traffic such as `__typename`, `/mgmt-news`, or `${name}`)
 
-攻撃リクエストは実際の攻撃の「形」だけを再現した無害なもので、外部の宛先にはすべて `attacker.example` などの予約ドメインを使っています。
+Attack requests are harmless reproductions of the *shape* of real attacks, and every external destination uses a reserved domain such as `attacker.example`.
 
-#### 模範解答の品質保証
+#### Quality assurance for the model answers
 
-- `go test ./...` で、ラボ・実戦テスト・運用演習の全 46 問の模範解答が「攻撃をすべて止め、正常な通信を 1 件も止めない」ことを確かめています（`internal/wafrule` の評価器で、AWS WAF の判定をローカルで再現）。
-- ありがちな失敗ルールが、本当にすり抜けか誤検知を起こすことも確かめています。
-- 模範解答と失敗ルールの JSON は、AWS WAF の CheckCapacity API で文法を確認済みです。
-- 実際の AWS 環境 (ALB + WAF) でも、全問について「ルールなしでは攻撃が通る」「模範解答で 100 点」になることを確認しています。ALB は、1 回デコードするとサイトのルートより上に遡るパスを WAF より前に 400 で拒否するため、そのようなパスを使わないこともテストで確かめています。確認し直すときは次のようにします（リソースは作られません）。
+- `go test ./...` checks that the model answers for all 46 lab, exam, and ops challenges block every attack and no legitimate request (the evaluator in `internal/wafrule` reproduces AWS WAF's matching locally).
+- It also checks that each common-pitfall rule really does let attacks through or cause false positives.
+- The JSON of the model answers and pitfall rules has been syntax-checked with the AWS WAF CheckCapacity API.
+- On real AWS (ALB + WAF), every challenge has been confirmed to let attacks through with no rules and to score 100 with the model answer. ALB rejects with 400, before WAF, any path that climbs above the site root after one decode, so tests also make sure no such path is used. To re-check (no resources are created):
 
 ```sh
 mkdir -p /tmp/rules && WAFDY_EXPORT_RULES=/tmp/rules go test -run TestExportLabRules ./internal/scenario/
 for f in /tmp/rules/*.json; do aws wafv2 check-capacity --scope REGIONAL --cli-binary-format raw-in-base64-out --rules file://$f; done
 ```
 
-Level 4 で使う Core rule set だけで 700 WCU を使います。ラボの模範解答の WCU を合計すると約 1,000 になり、チュートリアルやゲームのルールと合わせると Web ACL の上限 (既定 1,500 WCU) に近づきます。こなした問題のルールは削除しても記録は残ります。
+The Core rule set used in Level 4 alone consumes 700 WCU. The lab model answers add up to about 1,000 WCU, which together with tutorial and game rules approaches the Web ACL limit (1,500 WCU by default). Deleting the rules of challenges you have mastered keeps your records.
 
-Level 4 のマネージドルールは、AWS が公開しているルールの説明に沿って評価器で再現しています（中身は非公開なので完全な再現ではありません）。ルール名とラベル名は、AWS の DescribeManagedRuleGroup API で本物と一致することを確認しています。
+The Level 4 managed rules are reproduced in the evaluator from AWS's published rule descriptions (the actual contents are not public, so it is not an exact reproduction). Rule and label names have been confirmed against the real ones with AWS's DescribeManagedRuleGroup API.
 
-### 運用演習（2 問・偵察あり）
+### Ops drills (2 challenges, with recon)
 
-本番の運用と同じように、まず Count のルールで「偵察」(採点なし) してから、WAF ログを調べて本番に臨む問題です。
+As in real operations, you first run a "recon" (unscored) with Count rules, study the WAF logs, and then take the real run.
 
-| 問題 | 内容 |
+| Challenge | Content |
 |---|---|
-| 誤検知の犯人探し | XSS 対策のルールに一致してしまう正規の通信 (取引先のメールテンプレート同期) を、ログから見つけて例外にする。正規の通信の例は画面に出しません |
-| ログからボットを特定せよ | リスト型攻撃のボットの JA4 を、Logs Insights で /login へのリクエストを集計して見つける。JA4 は画面に出しません |
+| Find the false-positive culprit | Find, from the logs, the legitimate traffic (a partner's email template sync) that trips your XSS rule, and carve out an exception. The legitimate traffic is not shown on screen |
+| Identify the bot from the logs | Find the credential-stuffing bot's JA4 by aggregating /login requests in Logs Insights. The JA4 is not shown on screen |
 
-### 実戦テスト（3 問・攻撃の詳細と模範解答は非公開）
+### Exams (3 challenges; attack details and model answers are hidden)
 
-ラボで学んだ攻撃の「まだ見せていない亜種」が来るテストです。ラボの模範解答を写しただけでは通りません。
+Tests that send variants of lab attacks you have not seen yet. Copying the lab model answers will not pass.
 
-| 問題 | 内容 |
+| Challenge | Content |
 |---|---|
-| Log4Shell の変異体 | ヘッダー・クエリ・Body のどこにでも、入れ子・二重エンコード・JSON のエスケープを使った Log4Shell が来る |
-| パストラバーサル総まとめ | パス・クエリ・Cookie・JSON に、Linux / Windows 形式と様々なエンコードの遡りが来る |
-| 開けてはいけない扉 | .git・.env・actuator などへのアクセスが、大文字・スラッシュの重複・../ の遠回り・; ・エンコードで来る |
+| Log4Shell mutants | Log4Shell anywhere in headers, query, or body, using nesting, double encoding, and JSON escapes |
+| Path traversal grand tour | Traversal in path, query, cookies, and JSON, in Linux and Windows styles with assorted encodings |
+| Doors that must stay shut | Access to .git, .env, actuator and the like, via uppercase, duplicated slashes, ../ detours, `;`, and encoding |
 
-### ゲームの要素
+### Game elements
 
-- **段位**: チュートリアル以外のベストスコアの合計で、見習い → 白帯 → 黄帯 → 緑帯 → 青帯 → 茶帯 → 黒帯と上がり、WAF スペシャリストになると「師範」になります。
-- **実績**: 「はじめての満点」「自力の 10 問 (ヒントなし)」「Log4Shell ハンター」「指紋鑑定士 (JA4)」など 14 種類。
-- **案内役のまもりん**: 画面の右下で、次に挑戦する問題のおすすめ、問題ごとのコツ、結果への反応 (満点・すり抜け・誤ブロック) を話します。クリックするとワンポイントを教えてくれます。× で隠せます。
-- 満点を取ったときや、段位が上がったとき、実績を取ったときは紙吹雪でお祝いします。
+- **Ranks**: Based on the sum of best scores outside the tutorials, you rise from Trainee → White belt → Yellow → Green → Blue → Brown → Black belt, and become "Master" when certified as a WAF specialist.
+- **Achievements**: 14 kinds, such as "First perfect", "Ten on my own (no hints)", "Log4Shell hunter", and "Fingerprint expert (JA4)".
+- **Mamorin, your guide**: From the bottom-right corner, Mamorin suggests what to try next, gives per-challenge tips, and reacts to your results (perfect, leaks, false positives). Click for a tip; hide with ×.
+- Confetti celebrates perfect scores, rank-ups, and new achievements.
 
-### WAF スペシャリスト認定
+### WAF specialist certification
 
-チュートリアルをすべてクリアし、それ以外の全 52 問 (ゲーム 6・ラボ 41・実戦テスト 3・運用演習 2) をすべて 80 点以上にすると、ロビーとランキングに 🏅 WAF スペシャリストとして表示されます。
+Clear every tutorial and score 80 or higher on all 52 other challenges (6 game, 41 lab, 3 exam, 2 ops) to be shown as a 🏅 WAF specialist in the lobby and on the leaderboard.
 
-シナリオは `internal/scenario/` の各ファイルに `register(...)`（ラボは `lab(level, ...)`）を足せば増やせます。ラボの問題を足すときは模範解答も書くと、テストで正しさが自動的に確かめられます。
+Add scenarios by calling `register(...)` (or `lab(level, ...)` for labs) in the files under `internal/scenario/`. If you also write a model answer for a lab, the tests verify its correctness automatically.
 
-## 多言語対応
+## Languages
 
-画面は日本語と英語に対応しています。ヘッダーの「言語 / Language」で切り替えられます。最初はブラウザの言語設定に合わせて選ばれ、選んだ言語はブラウザに保存されます。
+The UI supports Japanese and English, switchable from "Language" in the header. The initial choice follows the browser's language settings, and your choice is saved in the browser.
 
-言語を増やすときは、次の 3 か所に追加します。
+To add a language, add it in three places:
 
-1. `internal/scenario/i18n.go` の `Lang` と `Langs`
-2. シナリオの文章 (`internal/scenario/*.go` の `T(...)`) と API のメッセージ (`cmd/gameapi/main.go` の `messages`)。`Text` は `map[Lang]string` なので、`Text{Japanese: ..., English: ..., "ko": ...}` のように訳を足せます
-3. 画面の文言 (`cmd/gameapi/web/app.js` の `I18N` と `LANG_NAMES`)
+1. `Lang` and `Langs` in `internal/scenario/i18n.go`
+2. Scenario text (`T(...)` in `internal/scenario/*.go`) and API messages (`messages` in `cmd/gameapi/main.go`). `Text` is a `map[Lang]string`, so you can add translations like `Text{Japanese: ..., English: ..., "ko": ...}`
+3. UI strings (`I18N` and `LANG_NAMES` in `cmd/gameapi/web/app.js`)
 
-訳がない文章は英語、次に日本語で表示されます。`go test ./...` を実行すると、シナリオと API メッセージに訳の抜けがないかを確認できます。
+Untranslated text falls back to English, then Japanese. `go test ./...` checks scenarios and API messages for missing translations.
 
-## スコア
+## Scoring
 
 ```
-スコア = 100 × 攻撃のブロック率 × (1 − 誤ブロック率)      ヒントを見た場合は × 0.8
+score = 100 × attack block rate × (1 − false-positive rate)      × 0.8 if you viewed hints
 ```
 
-- チュートリアルは各 70 点以上でクリア。6 本すべてクリアするとゲームモードと脆弱性対応ラボが解放されます。ランキングの合計には含みません。
-- チュートリアル以外の問題 (ゲーム・ラボ・実戦テスト・運用演習) は各 100 点満点。80 点以上で「こなした」ことになります。ランキングの合計と段位は、これらの自己ベストの合計で決まります。
-- 運用演習の「偵察」は採点されず、記録にも残りません。
-- ALB が不正なリクエストとして返した 400 は、WAF のブロックとは数えず、通信エラーとして採点から除きます。
-- レートベースルールを使うシナリオ（チュートリアル 5・ステージ 5）は、ルールの立ち上がりを待つため最初の 60 秒の攻撃を採点しません。
-- ゲームモードには準備時間（7〜8 分）があり、時間切れになると自動で攻撃が始まります。
+- Each tutorial is cleared at 70 or higher. Clearing all 6 unlocks game mode and the vulnerability labs. Tutorials do not count toward the leaderboard total.
+- Every other challenge (game, lab, exam, ops) is worth up to 100 points and counts as "mastered" at 80 or higher. Your leaderboard total and rank come from the sum of these personal bests.
+- Ops-drill recon runs are not scored or recorded.
+- A 400 returned by the ALB for a malformed request is not counted as a WAF block; it is treated as a network error and excluded from scoring.
+- Scenarios with rate-based rules (tutorial 5, stage 5) do not score the first 60 seconds of attacks, to give the rule time to kick in.
+- Game mode has a preparation time (7–8 minutes); when it runs out, the attack starts automatically.
 
-## 必要なもの
+## Requirements
 
-- Go 1.26 以上
-- Terraform 1.6 以上
-- 管理者に近い権限の AWS 認証情報
+- Go 1.26 or later
+- Terraform 1.6 or later
+- AWS credentials with near-administrator permissions
 
-## デプロイ
+## Deploy
 
 ```sh
-aws sts get-caller-identity   # デプロイ先の AWS アカウントを必ず確認する
-cp terraform/terraform.tfvars.example terraform/terraform.tfvars   # player_count などを編集 (なければ実行時に聞かれる)
-make deploy      # テスト → Lambda のビルド → terraform apply
+aws sts get-caller-identity   # always confirm the target AWS account first
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars   # edit player_count etc. (you will be prompted if omitted)
+make deploy      # tests → build the Lambdas → terraform apply
 ```
 
-一人で遊ぶ場合も、`terraform -chdir=terraform output -json player_access` で表示される自分の `game_url` から開いてください。
+Even when playing solo, open the game from your own `game_url`, shown by `terraform -chdir=terraform output -json player_access`.
 
-### 複数人で遊ぶとき（自分の設定しか触れない仕組み）
+### Playing with multiple people (each player can only touch their own settings)
 
-`terraform apply` のときにプレイ人数 (`player_count`) を聞かれます。`terraform.tfvars` に書いておくこともできます。人数分の `player1`, `player2`, ... が作られ、1 人につき ALB と Web ACL が 1 つずつ用意されます。
+`terraform apply` asks for the number of players (`player_count`); you can also set it in `terraform.tfvars`. Players `player1`, `player2`, ... are created, each with their own ALB and Web ACL.
 
-各プレイヤーに配る情報は次のコマンドで表示できます（パスワードとトークンを含むので、本人にだけ渡してください）。
+Show the information to hand out to each player with the command below (it contains passwords and tokens, so give each player only their own).
 
 ```sh
 terraform -chdir=terraform output -json player_access
 ```
 
-| 項目 | 内容 |
+| Field | Content |
 |---|---|
-| `game_url` | 自分専用のゲーム画面の URL (秘密のトークン付き)。この URL で開いた人だけが、そのプレイヤーとして攻撃開始や模範解答の閲覧ができる。トークンはブラウザに保存され、アドレスバーからは消える。トークンなしで開くと観戦モード (ランキングと問題は見られる) |
-| `console_signin` / `console_user` / `console_pass` | AWS コンソールのログイン情報 (プレイヤー専用の IAM ユーザー) |
-| `ipset_prefix` | IP セット・正規表現パターンセットの名前の先頭に付ける文字列 (例: `wafdy-player1-`) |
+| `game_url` | The player's own game URL (with a secret token). Only someone who opened this URL can start attacks or view model answers as that player. The token is stored in the browser and removed from the address bar. Opening without a token gives spectator mode (leaderboard and challenges are visible) |
+| `console_signin` / `console_user` / `console_pass` | AWS console sign-in for the player's own IAM user |
+| `ipset_prefix` | Prefix for IP set and regex pattern set names (e.g. `wafdy-player1-`) |
 
-プレイヤー専用の IAM ユーザーができること / できないこと（IAM ポリシーシミュレーターで確認済み）:
+What a player's IAM user can and cannot do (verified with the IAM policy simulator):
 
-- できる: 自分の Web ACL のルールの変更、名前が `wafdy-<自分>-` で始まる IP セット・正規表現パターンセットの作成・変更・削除、自分の WAF ログの Logs Insights での検索、マネージドルールの一覧と中身の確認
-- できない: 他のプレイヤーの Web ACL・IP セット・ログを見ること・変えること、Web ACL の削除、ALB との関連付けの変更、ログ設定の変更、スコアの書き換え、攻撃用 Lambda の直接実行
+- Can: change the rules of their own Web ACL; create, change, and delete IP sets and regex pattern sets whose names start with `wafdy-<self>-`; search their own WAF logs in Logs Insights; list and inspect managed rule groups
+- Cannot: view or change other players' Web ACLs, IP sets, or logs; delete Web ACLs; change ALB associations; change logging settings; tamper with scores; invoke the attack Lambda directly
 
-組織のルールで IAM ユーザーを作れない場合は `create_player_users = false` にしてください（ゲーム画面のトークンだけになります）。
+If your organization does not allow IAM users, set `create_player_users = false` (players then only get the game token).
 
-## 画面だけをローカルで確かめる
+## Try the UI locally
 
 ```sh
 make dev   # http://127.0.0.1:8080
 ```
 
-AWS なしで画面と API を動かせる開発モードです。データはメモリ上に保存し、攻撃は実際には送りません。ラボは模範解答のルールを当てた結果を採点結果として返します。URL に `#/lab-3-ssrf-metadata` のように問題 ID を付けるとその画面を直接開け、`?lang=en` で言語を指定できます。
+Development mode runs the UI and API without AWS. Data is kept in memory and no attacks are actually sent; labs return the result of applying the model-answer rule as the score. Append a challenge ID such as `#/lab-3-ssrf-metadata` to the URL to open it directly, and use `?lang=en` to pick the language.
 
-## 片付け
+## Cleanup
 
 ```sh
 make destroy
 ```
 
-Web ACL のルールはコンソールで足したものですが、Web ACL と一緒に削除されます。IP セットや正規表現パターンセットをコンソールで作った場合は、それらは手で削除してください。
+Web ACL rules added in the console are deleted together with the Web ACL. Delete any IP sets or regex pattern sets you created in the console by hand.
 
-## 費用の目安
+## Estimated cost
 
-使っていないときもかかるのは主に次の 2 つです。遊び終わったら `make destroy` してください。
+The main costs incurred even when idle are the two below. Run `make destroy` when you are done.
 
-- ALB: 1 台あたり 1 時間 約 $0.0243 + LCU
-- AWS WAF: Web ACL 1 つあたり月 $5 + ルール 1 つあたり月 $1（時間割）+ リクエスト 100 万件あたり $0.60
+- ALB: about $0.0243 per hour per ALB + LCU
+- AWS WAF: $5 per Web ACL per month + $1 per rule per month (prorated hourly) + $0.60 per million requests
 
-Lambda・DynamoDB・CloudWatch Logs は学習で使う程度なら少額です。Bot Control などの有料マネージドルールを入れると追加料金がかかります。
+Lambda, DynamoDB, and CloudWatch Logs cost little at learning-scale usage. Paid managed rules such as Bot Control incur extra charges.
 
-## 注意
+## Notes
 
-- ALB はインターネットに公開されるので、ゲームと関係ないスキャンも届くことがあります。採点は生成器が送ったリクエストの応答だけで行うので、スコアには影響しません。
-- Web ACL のルールは Terraform の管理外です（`ignore_changes = [rule]`）。`terraform apply` をやり直してもプレイヤーの設定は消えません。
-
-## ライセンス
-
-このソフトウェアは [PolyForm Shield License 1.0.0](LICENSE.md) で提供しています。ソースコードは公開していますが、利用に条件があるため、オープンソースライセンスではありません。
-
-**要約 (正式な条件は英語の原文 [LICENSE.md](LICENSE.md) です)**
-
-- 個人の学習、企業・団体の社内研修、学校の授業などで、自由に利用・改変できます。
-- このソフトウェアと競合する製品やサービスを提供することはできません。たとえば、このソフトウェア (改変したものを含む) を WAF の研修サービスや学習教材として販売・提供することはできません。無料で提供する場合も競合にあたります。
-- 再配布するときは、ライセンスの本文 (または URL) と、`Required Notice:` で始まる行 (`Required Notice: Copyright Akira Nishikawa`) を一緒に渡してください。
-- 無保証です。
-- **有料の研修で利用したい場合は、info@i-wind.jp までご相談ください。**
-
-### 利用上の注意
-
-このソフトウェアは、実際の攻撃の形を再現したリクエストを送ります。送り先はこのソフトウェアが作る環境の ALB だけですが、改変して使う場合も、**自分が管理する環境に対してだけ** 使ってください。
+- The ALB is exposed to the internet, so unrelated scans may arrive. Scoring only uses responses to requests sent by the generator, so they do not affect scores.
+- Web ACL rules are not managed by Terraform (`ignore_changes = [rule]`). Re-running `terraform apply` does not erase players' settings.
 
 ## License
 
-This software is licensed under the [PolyForm Shield License 1.0.0](LICENSE.md). You may use and modify it for any purpose — including personal learning, internal corporate training, and classroom use — except providing a product that competes with it (for example, selling or offering it, or a modified version, as a WAF training service or course material). See [LICENSE.md](LICENSE.md) for the full terms. For paid training, please contact info@i-wind.jp.
+This software is licensed under the [PolyForm Shield License 1.0.0](LICENSE.md). The source code is public, but its use is subject to conditions, so it is not an open source license.
+
+**Summary (the official terms are in [LICENSE.md](LICENSE.md))**
+
+- You may freely use and modify it for personal learning, internal training at companies and organizations, school classes, and so on.
+- You may not provide a product or service that competes with this software. For example, you may not sell or offer this software (including modified versions) as a WAF training service or course material. Offering it for free also counts as competing.
+- When redistributing, include the license text (or its URL) and the line starting with `Required Notice:` (`Required Notice: Copyright Akira Nishikawa`).
+- No warranty.
+- **For use in paid training, please contact info@i-wind.jp.**
+
+### Responsible use
+
+This software sends requests that reproduce the shape of real attacks. It only sends them to the ALBs of the environment it creates, but if you modify it, use it **only against environments you own**.
 
 Required Notice: Copyright Akira Nishikawa

@@ -299,7 +299,7 @@ func (s *Scenario) SolutionView(l Lang) *SolutionView {
 // ヘッダーは生成器 (Go の HTTP クライアント) が実際に付けるものも含める。
 func (r Request) WAFView() wafrule.Request {
 	w := wafrule.Request{Method: r.MethodOrGet(), Path: r.Path, RawQuery: r.RawQuery, Body: r.Body, JA4: tlsprofile.JA4(r.TLSProfile())}
-	w.Headers = append(w.Headers, [2]string{"Host", "shop.wafdy.example"})
+	w.Headers = append(w.Headers, [2]string{"Host", "shop.wafdojo.example"})
 	keys := make([]string, 0, len(r.Headers))
 	for k := range r.Headers {
 		keys = append(keys, k)

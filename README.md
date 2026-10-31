@@ -42,7 +42,7 @@ Browser ── Lambda Function URL (gameapi: UI + API)                      │
   It uses [uTLS](https://github.com/refraction-networking/utls) to craft different TLS ClientHellos for browsers (Chrome / Firefox / Safari) and attack tools, so you can practice telling them apart by JA4 fingerprint.
 - **gameapi**: The game UI and API, served from a Lambda Function URL.
 - An ALB can only have one Web ACL, so each player gets their own ALB and Web ACL.
-- To experience CloudFront's body inspection limit (16 KB by default, up to 64 KB), each player also gets a CloudFront distribution and a CloudFront-scoped Web ACL (`wafdy-<name>-cf`, us-east-1). CloudFront fronts the dummy app's Lambda Function URL directly rather than the ALB, so the ALB's Web ACL rules do not apply there. Set `enable_cloudfront = false` to skip it.
+- To experience CloudFront's body inspection limit (16 KB by default, up to 64 KB), each player also gets a CloudFront distribution and a CloudFront-scoped Web ACL (`wafdojo-<name>-cf`, us-east-1). CloudFront fronts the dummy app's Lambda Function URL directly rather than the ALB, so the ALB's Web ACL rules do not apply there. Set `enable_cloudfront = false` to skip it.
 - JA4 is only computed over HTTPS, so the ALB listens on HTTPS (443). To work without a domain, a self-signed certificate is generated and imported into ACM (its private key ends up in the Terraform state).
 - Source IPs are represented by documentation addresses (RFC 5737) in `X-Forwarded-For` (the site is assumed to sit behind a CDN).
 
@@ -197,11 +197,11 @@ terraform -chdir=terraform output -json player_access
 |---|---|
 | `game_url` | The player's own game URL (with a secret token). Only someone who opened this URL can start attacks or view model answers as that player. The token is stored in the browser and removed from the address bar. Opening without a token gives spectator mode (leaderboard and challenges are visible) |
 | `console_signin` / `console_user` / `console_pass` | AWS console sign-in for the player's own IAM user |
-| `ipset_prefix` | Prefix for IP set and regex pattern set names (e.g. `wafdy-player1-`) |
+| `ipset_prefix` | Prefix for IP set and regex pattern set names (e.g. `wafdojo-player1-`) |
 
 What a player's IAM user can and cannot do (verified with the IAM policy simulator):
 
-- Can: change the rules of their own Web ACL; create, change, and delete IP sets and regex pattern sets whose names start with `wafdy-<self>-`; search their own WAF logs in Logs Insights; list and inspect managed rule groups
+- Can: change the rules of their own Web ACL; create, change, and delete IP sets and regex pattern sets whose names start with `wafdojo-<self>-`; search their own WAF logs in Logs Insights; list and inspect managed rule groups
 - Cannot: view or change other players' Web ACLs, IP sets, or logs; delete Web ACLs; change ALB associations; change logging settings; tamper with scores; invoke the attack Lambda directly
 
 If your organization does not allow IAM users, set `create_player_users = false` (players then only get the game token).

@@ -250,7 +250,7 @@ func JA4(name Name) string {
 	c1, c2 := net.Pipe()
 	defer c1.Close()
 	defer c2.Close()
-	uconn, err := get(name).client(c1, "shop.wafdy.example")
+	uconn, err := get(name).client(c1, "shop.wafdojo.example")
 	if err == nil {
 		err = uconn.BuildHandshakeState()
 	}

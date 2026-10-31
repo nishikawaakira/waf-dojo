@@ -106,7 +106,7 @@ func TestRequestsAreSentVerbatim(t *testing.T) {
 	for _, s := range scenario.All() {
 		for _, p := range s.Patterns {
 			r := p.Make(rng)
-			req, err := newRequest(context.Background(), "https://shop.wafdy.example", r)
+			req, err := newRequest(context.Background(), "https://shop.wafdojo.example", r)
 			if err != nil {
 				t.Errorf("%s: %v", s.ID, err)
 				continue

@@ -15,11 +15,11 @@ resource "tls_self_signed_cert" "alb" {
   allowed_uses          = ["key_encipherment", "digital_signature", "server_auth"]
 
   subject {
-    common_name  = "shop.wafdy.example"
+    common_name  = "shop.wafdojo.example"
     organization = "WAF Dojo"
   }
 
-  dns_names = ["shop.wafdy.example"]
+  dns_names = ["shop.wafdojo.example"]
 }
 
 resource "aws_acm_certificate" "alb" {
@@ -34,7 +34,7 @@ resource "aws_acm_certificate" "alb" {
 # トラフィック生成 Lambda は VPC の外から ALB の公開 DNS に送るため、443 番は全体に開ける。
 resource "aws_security_group" "alb" {
   name        = "${var.project}-alb"
-  description = "wafdy target ALB"
+  description = "wafdojo target ALB"
   vpc_id      = aws_vpc.main.id
 
   ingress {

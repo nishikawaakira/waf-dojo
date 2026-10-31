@@ -42,7 +42,7 @@ AWS WAF を「攻撃を受けながら」学ぶための学習環境です。
   [uTLS](https://github.com/refraction-networking/utls) を使って、ブラウザ (Chrome / Firefox / Safari) と攻撃ツールで TLS の ClientHello を作り分けているので、JA4 フィンガープリントで見分ける練習ができます。
 - **gameapi**: ゲーム画面と API。Lambda Function URL で公開します。
 - ALB には Web ACL を 1 つしか付けられないので、プレイヤーごとに ALB と Web ACL を 1 つずつ作ります。
-- CloudFront の Body の検査上限 (既定 16 KB・最大 64 KB) を体験するため、プレイヤーごとに CloudFront と CloudFront 用の Web ACL (`wafdy-<名前>-cf`、us-east-1) も作ります。CloudFront の後ろには ALB ではなくダミーアプリ (Lambda Function URL) を直接つなぐので、ALB 側の Web ACL のルールは効きません。`enable_cloudfront = false` で作らないようにもできます。
+- CloudFront の Body の検査上限 (既定 16 KB・最大 64 KB) を体験するため、プレイヤーごとに CloudFront と CloudFront 用の Web ACL (`wafdojo-<名前>-cf`、us-east-1) も作ります。CloudFront の後ろには ALB ではなくダミーアプリ (Lambda Function URL) を直接つなぐので、ALB 側の Web ACL のルールは効きません。`enable_cloudfront = false` で作らないようにもできます。
 - JA4 は HTTPS でしか計算されないため、ALB は HTTPS (443) で受けます。ドメインがなくても動くように、自己署名証明書を作って ACM にインポートしています（秘密鍵は Terraform の state に入ります）。
 - 送信元 IP は、ドキュメント用の IP アドレス (RFC 5737) を `X-Forwarded-For` に入れて表現しています（「CDN の後ろにあるサイト」という設定）。
 
@@ -197,11 +197,11 @@ terraform -chdir=terraform output -json player_access
 |---|---|
 | `game_url` | 自分専用のゲーム画面の URL (秘密のトークン付き)。この URL で開いた人だけが、そのプレイヤーとして攻撃開始や模範解答の閲覧ができる。トークンはブラウザに保存され、アドレスバーからは消える。トークンなしで開くと観戦モード (ランキングと問題は見られる) |
 | `console_signin` / `console_user` / `console_pass` | AWS コンソールのログイン情報 (プレイヤー専用の IAM ユーザー) |
-| `ipset_prefix` | IP セット・正規表現パターンセットの名前の先頭に付ける文字列 (例: `wafdy-player1-`) |
+| `ipset_prefix` | IP セット・正規表現パターンセットの名前の先頭に付ける文字列 (例: `wafdojo-player1-`) |
 
 プレイヤー専用の IAM ユーザーができること / できないこと（IAM ポリシーシミュレーターで確認済み）:
 
-- できる: 自分の Web ACL のルールの変更、名前が `wafdy-<自分>-` で始まる IP セット・正規表現パターンセットの作成・変更・削除、自分の WAF ログの Logs Insights での検索、マネージドルールの一覧と中身の確認
+- できる: 自分の Web ACL のルールの変更、名前が `wafdojo-<自分>-` で始まる IP セット・正規表現パターンセットの作成・変更・削除、自分の WAF ログの Logs Insights での検索、マネージドルールの一覧と中身の確認
 - できない: 他のプレイヤーの Web ACL・IP セット・ログを見ること・変えること、Web ACL の削除、ALB との関連付けの変更、ログ設定の変更、スコアの書き換え、攻撃用 Lambda の直接実行
 
 組織のルールで IAM ユーザーを作れない場合は `create_player_users = false` にしてください（ゲーム画面のトークンだけになります）。

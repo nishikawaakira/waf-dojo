@@ -112,11 +112,11 @@ make players
 === player1 ===
   ゲーム画面      : https://xxxx.lambda-url.ap-northeast-1.on.aws/?player=player1&token=...
   コンソール      : https://<アカウントID>.signin.aws.amazon.com/console
-  IAM ユーザー名  : wafdy-player1
+  IAM ユーザー名  : wafdojo-player1
   パスワード      : ...
   WAF コンソール  : https://console.aws.amazon.com/wafv2/homev2/web-acls?region=ap-northeast-1
-  Web ACL         : wafdy-player1
-  IP セット等の名前の先頭: wafdy-player1-
+  Web ACL         : wafdojo-player1
+  IP セット等の名前の先頭: wafdojo-player1-
 ```
 
 ### 4-2. 1 人ずつ、本人にだけ渡す
@@ -131,8 +131,8 @@ make players
 ### 4-3. 参加者に伝えておくとよいこと
 
 - ゲーム画面とコンソールは、**それぞれの URL から開く**こと
-- AWS コンソールでは、リージョンを **アジアパシフィック (東京)** にすること。ただし CloudFront を使う問題では、CloudFront 用の Web ACL (`wafdy-<自分の名前>-cf`) を **Global (CloudFront)** で開くこと
-- IP セット・正規表現パターンセットの名前は **`wafdy-<自分の名前>-` で始める**こと (それ以外の名前では作れません)
+- AWS コンソールでは、リージョンを **アジアパシフィック (東京)** にすること。ただし CloudFront を使う問題では、CloudFront 用の Web ACL (`wafdojo-<自分の名前>-cf`) を **Global (CloudFront)** で開くこと
+- IP セット・正規表現パターンセットの名前は **`wafdojo-<自分の名前>-` で始める**こと (それ以外の名前では作れません)
 - ルールを保存してから反映されるまで **30〜60 秒** かかること
 
 ---
@@ -200,10 +200,10 @@ make players
 |---|---|
 | ルールを正しく設定したのに、最初の数件だけすり抜けた | ルールの反映 (30〜60 秒) が間に合っていません。結果画面とまもりんが「反映待ちかも」と知らせます。少し待って、もう一度攻撃開始してください |
 | コンソールで Web ACL が見つからない | (1) ログインしたアカウントが違う、(2) リージョンが東京になっていない、(3) スコープが CloudFront になっている、のどれかです。新しい WAF コンソールでは、メニュー名が「Protection packs (web ACLs)」になっていることがあります |
-| IP セットを作ろうとすると権限エラーになる | 名前が `wafdy-<自分の名前>-` で始まっていません |
+| IP セットを作ろうとすると権限エラーになる | 名前が `wafdojo-<自分の名前>-` で始まっていません |
 | ルールを追加できない (容量のエラー) | Web ACL のルールの重さ (WCU) の上限 (既定 1,500) を超えています。こなした問題のルールを削除してもらってください。Level 4 で使う Core rule set だけで 700 WCU を使います |
 | ゲーム画面で「自分専用の URL から開いてください」と出る | トークンなしで開いています。`make players` の URL から開き直してもらってください |
-| 結果に「通信エラー」が多い | ALB がリクエストを拒否 (400) しています。通常は起きませんが、続く場合は CloudWatch Logs の `/aws/lambda/wafdy-trafficgen` を確認してください |
+| 結果に「通信エラー」が多い | ALB がリクエストを拒否 (400) しています。通常は起きませんが、続く場合は CloudWatch Logs の `/aws/lambda/wafdojo-trafficgen` を確認してください |
 | 攻撃開始を押しても「別の攻撃が実行中」と出る | 同じ参加者の攻撃は 1 つずつしか実行できません。実行中の攻撃が終わる (最大 3〜5 分) まで待ってください |
 | `terraform` が認証エラーになる | SSO の一時認証情報の有効期限が切れています。新しい認証情報を `export` し直してください |
 | 他の参加者の設定を変えられてしまった | 参加者に SSO (管理者権限) を渡していないか確認してください。配った IAM ユーザーでは他の参加者の設定は変更できません |
@@ -212,9 +212,9 @@ make players
 
 | ログ | 場所 (CloudWatch Logs) |
 |---|---|
-| 参加者ごとの WAF ログ | `aws-waf-logs-wafdy-<参加者名>` (CloudFront 用は us-east-1 の `aws-waf-logs-wafdy-<参加者名>-cf`) |
-| 攻撃・採点 | `/aws/lambda/wafdy-trafficgen` |
-| ゲーム画面の API | `/aws/lambda/wafdy-gameapi` |
+| 参加者ごとの WAF ログ | `aws-waf-logs-wafdojo-<参加者名>` (CloudFront 用は us-east-1 の `aws-waf-logs-wafdojo-<参加者名>-cf`) |
+| 攻撃・採点 | `/aws/lambda/wafdojo-trafficgen` |
+| ゲーム画面の API | `/aws/lambda/wafdojo-gameapi` |
 
 ---
 
@@ -228,12 +228,12 @@ make destroy
 途中で参加人数を聞かれたら、今の人数を入力します。作成内容が表示されたら `yes` を入力します。CloudFront の削除には 10〜20 分ほどかかります。
 
 - ALB・Web ACL・Lambda・DynamoDB・IAM ユーザー・ログなど、Terraform が作ったものはすべて削除されます。スコアの記録も消えます。
-- **参加者がコンソールで作った IP セット・正規表現パターンセットは削除されません。** WAF コンソールの「IP sets」「Regex pattern sets」で、`wafdy-` で始まるものを削除してください。東京リージョンと Global (CloudFront) の両方を確認してください。
+- **参加者がコンソールで作った IP セット・正規表現パターンセットは削除されません。** WAF コンソールの「IP sets」「Regex pattern sets」で、`wafdojo-` で始まるものを削除してください。東京リージョンと Global (CloudFront) の両方を確認してください。
 - 削除後、ALB と Web ACL が残っていないことを確認しておくと安心です。
 
 ```sh
-aws elbv2 describe-load-balancers --query 'LoadBalancers[?starts_with(LoadBalancerName, `wafdy`)].LoadBalancerName'
-aws wafv2 list-web-acls --scope REGIONAL --query 'WebACLs[?starts_with(Name, `wafdy`)].Name'
+aws elbv2 describe-load-balancers --query 'LoadBalancers[?starts_with(LoadBalancerName, `wafdojo`)].LoadBalancerName'
+aws wafv2 list-web-acls --scope REGIONAL --query 'WebACLs[?starts_with(Name, `wafdojo`)].Name'
 ```
 
 ---
@@ -247,7 +247,7 @@ aws wafv2 list-web-acls --scope REGIONAL --query 'WebACLs[?starts_with(Name, `wa
 | できる | できない |
 |---|---|
 | 自分の Web ACL のルールの変更 | 他の参加者の Web ACL のルールを見る・変える |
-| `wafdy-<自分>-` で始まる IP セット・正規表現パターンセットの作成・変更・削除 | 他の参加者の IP セットやログに触れる |
+| `wafdojo-<自分>-` で始まる IP セット・正規表現パターンセットの作成・変更・削除 | 他の参加者の IP セットやログに触れる |
 | 自分の WAF ログを Logs Insights で調べる | Web ACL の削除、ALB との関連付けの変更、ログ設定の変更 |
 | マネージドルールの一覧や中身を見る | スコアの書き換え、攻撃用 Lambda の直接実行 |
 
@@ -266,16 +266,16 @@ aws wafv2 list-web-acls --scope REGIONAL --query 'WebACLs[?starts_with(Name, `wa
 
 | 種類 | 名前 | 個数 |
 |---|---|---|
-| VPC・サブネット | `wafdy` | 1 |
-| ALB (HTTPS, 自己署名証明書) | `wafdy-<参加者>` | 参加者ごと |
-| WAF Web ACL (ALB 用、東京リージョン) | `wafdy-<参加者>` | 参加者ごと |
-| CloudFront | コメントが `wafdy-<参加者>` | 参加者ごと |
-| WAF Web ACL (CloudFront 用、us-east-1) | `wafdy-<参加者>-cf` | 参加者ごと |
-| CloudWatch Logs (CloudFront 用 WAF ログ、us-east-1) | `aws-waf-logs-wafdy-<参加者>-cf` | 参加者ごと |
-| CloudWatch Logs (WAF ログ) | `aws-waf-logs-wafdy-<参加者>` | 参加者ごと |
-| IAM ユーザー (コンソール用) | `wafdy-<参加者>` | 参加者ごと |
-| Lambda | `wafdy-targetapp` (ダミーの EC サイト)、`wafdy-trafficgen` (攻撃・採点)、`wafdy-gameapi` (ゲーム画面) | 3 |
-| DynamoDB | `wafdy` (実行結果・ベストスコア) | 1 |
+| VPC・サブネット | `wafdojo` | 1 |
+| ALB (HTTPS, 自己署名証明書) | `wafdojo-<参加者>` | 参加者ごと |
+| WAF Web ACL (ALB 用、東京リージョン) | `wafdojo-<参加者>` | 参加者ごと |
+| CloudFront | コメントが `wafdojo-<参加者>` | 参加者ごと |
+| WAF Web ACL (CloudFront 用、us-east-1) | `wafdojo-<参加者>-cf` | 参加者ごと |
+| CloudWatch Logs (CloudFront 用 WAF ログ、us-east-1) | `aws-waf-logs-wafdojo-<参加者>-cf` | 参加者ごと |
+| CloudWatch Logs (WAF ログ) | `aws-waf-logs-wafdojo-<参加者>` | 参加者ごと |
+| IAM ユーザー (コンソール用) | `wafdojo-<参加者>` | 参加者ごと |
+| Lambda | `wafdojo-targetapp` (ダミーの EC サイト)、`wafdojo-trafficgen` (攻撃・採点)、`wafdojo-gameapi` (ゲーム画面) | 3 |
+| DynamoDB | `wafdojo` (実行結果・ベストスコア) | 1 |
 
 ### よく使うコマンド
 

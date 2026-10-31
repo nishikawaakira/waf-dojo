@@ -50,7 +50,7 @@ func registerLabAdvisories() {
 			}},
 			{Attack, T("コマンドインジェクション", "Command injection"), 10, func(r *rand.Rand) Request {
 				return atk(r, postJSON(r, "/api/v1/totp/user-backup-code/../../system/maintenance/archiving/cloud-server-test-connection",
-					`{"type":";echo wafdy-test;","txtGCPProject":"a","txtGCPSecret":"a","txtGCPPath":"a","txtGCPBucket":"a"}`))
+					`{"type":";echo wafdojo-test;","txtGCPProject":"a","txtGCPSecret":"a","txtGCPPath":"a","txtGCPBucket":"a"}`))
 			}},
 			{Attack, T("../ をエンコード", "Encoded ../"), 10, func(r *rand.Rand) Request {
 				return atk(r, get(r, "/api/v1/totp/user-backup-code/%2e%2e/%2e%2e/license/keys-status/", ""))
@@ -130,7 +130,7 @@ func registerLabAdvisories() {
 				case 1:
 					return postJSON(r, "/users/password", `{"user":{"email":"me@example.com"}}`)
 				}
-				return get(r, "/users/password/edit", "reset_password_token=wafdy"+randomText(r, 12))
+				return get(r, "/users/password/edit", "reset_password_token=wafdojo"+randomText(r, 12))
 			}},
 			{Benign, lblBrowse, 20, browse},
 		},

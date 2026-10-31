@@ -11,8 +11,8 @@ import (
 // ---------------------------------------------------------------------------
 
 func multipartUpload(filename, content string) (contentType, body string) {
-	return "multipart/form-data; boundary=wafdyboundary",
-		"--wafdyboundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + filename + "\"\r\nContent-Type: application/octet-stream\r\n\r\n" + content + "\r\n--wafdyboundary--\r\n"
+	return "multipart/form-data; boundary=wafdojoboundary",
+		"--wafdojoboundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + filename + "\"\r\nContent-Type: application/octet-stream\r\n\r\n" + content + "\r\n--wafdojoboundary--\r\n"
 }
 
 func registerLabLevel3() {
@@ -457,27 +457,27 @@ func registerLabLevel3() {
 		},
 		Patterns: []Pattern{
 			{Attack, T("PoC そのまま (.php)", "The PoC as published (.php)"), 6, func(r *rand.Rand) Request {
-				ct, body := multipartUpload("shell.php", "<?php echo 'wafdy-test'; ?>")
+				ct, body := multipartUpload("shell.php", "<?php echo 'wafdojo-test'; ?>")
 				return atk(r, withBody(post(r, "/upload", ""), ct, body))
 			}},
 			{Attack, T("大文字の拡張子", "Uppercase extension"), 6, func(r *rand.Rand) Request {
-				ct, body := multipartUpload("shell.PHP", "<?php echo 'wafdy-test'; ?>")
+				ct, body := multipartUpload("shell.PHP", "<?php echo 'wafdojo-test'; ?>")
 				return atk(r, withBody(post(r, "/upload", ""), ct, body))
 			}},
 			{Attack, T(".phtml", ".phtml"), 6, func(r *rand.Rand) Request {
-				ct, body := multipartUpload("shell.phtml", "<?php echo 'wafdy-test'; ?>")
+				ct, body := multipartUpload("shell.phtml", "<?php echo 'wafdojo-test'; ?>")
 				return atk(r, withBody(post(r, "/upload", ""), ct, body))
 			}},
 			{Attack, T(".php5", ".php5"), 6, func(r *rand.Rand) Request {
-				ct, body := multipartUpload("shell.php5", "<?php echo 'wafdy-test'; ?>")
+				ct, body := multipartUpload("shell.php5", "<?php echo 'wafdojo-test'; ?>")
 				return atk(r, withBody(post(r, "/upload", ""), ct, body))
 			}},
 			{Attack, T("二重拡張子 (.php.jpg)", "Double extension (.php.jpg)"), 6, func(r *rand.Rand) Request {
-				ct, body := multipartUpload("shell.php.jpg", "<?php echo 'wafdy-test'; ?>")
+				ct, body := multipartUpload("shell.php.jpg", "<?php echo 'wafdojo-test'; ?>")
 				return atk(r, withBody(post(r, "/upload", ""), ct, body))
 			}},
 			{Attack, T("ヌル文字で拡張子を切る", "Null byte to cut the extension"), 6, func(r *rand.Rand) Request {
-				ct, body := multipartUpload("shell.php%00.jpg", "<?php echo 'wafdy-test'; ?>")
+				ct, body := multipartUpload("shell.php%00.jpg", "<?php echo 'wafdojo-test'; ?>")
 				return atk(r, withBody(post(r, "/upload", ""), ct, body))
 			}},
 			{Benign, T("正規のアップロード", "Legitimate uploads"), 30, func(r *rand.Rand) Request {

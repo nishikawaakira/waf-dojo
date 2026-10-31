@@ -6,7 +6,7 @@
 set -euo pipefail
 
 what="${1:-}"; player="${2:-}"
-project="${PROJECT:-wafdy}"; region="${REGION:-ap-northeast-1}"
+project="${PROJECT:-wafdojo}"; region="${REGION:-ap-northeast-1}"
 if [[ ! "$what" =~ ^(rules|scores)$ || ! "$player" =~ ^[a-z0-9][a-z0-9-]{0,19}$ ]]; then
   echo "usage: $0 rules|scores <player>" >&2
   exit 2

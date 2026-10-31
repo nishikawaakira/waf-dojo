@@ -7,7 +7,7 @@ variable "region" {
 variable "project" {
   description = "リソース名の接頭辞"
   type        = string
-  default     = "wafdy"
+  default     = "wafdojo"
 }
 
 variable "player_count" {

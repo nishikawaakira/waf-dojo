@@ -132,10 +132,10 @@ func registerLabLevel1() {
 		},
 		Patterns: []Pattern{
 			{Attack, T("POST の Body に classLoader", "classLoader in a POST body"), 12, func(r *rand.Rand) Request {
-				return atk(r, post(r, "/register", form("class.module.classLoader.resources.context.parent.pipeline.first.pattern", "wafdy-test", "class.module.classLoader.resources.context.parent.pipeline.first.suffix", ".txt")))
+				return atk(r, post(r, "/register", form("class.module.classLoader.resources.context.parent.pipeline.first.pattern", "wafdojo-test", "class.module.classLoader.resources.context.parent.pipeline.first.suffix", ".txt")))
 			}},
 			{Attack, T("GET のクエリに classLoader", "classLoader in a GET query"), 12, func(r *rand.Rand) Request {
-				return atk(r, get(r, "/register", q("class.module.classLoader.resources.context.parent.pipeline.first.prefix", "wafdy")))
+				return atk(r, get(r, "/register", q("class.module.classLoader.resources.context.parent.pipeline.first.prefix", "wafdojo")))
 			}},
 			{Attack, T("大文字小文字を変えたパラメータ名", "Parameter name with different case"), 12, func(r *rand.Rand) Request {
 				return atk(r, post(r, "/register", form("Class.Module.ClassLoader.resources.context.parent.pipeline.first.fileDateFormat", "_")))
@@ -181,16 +181,16 @@ func registerLabLevel1() {
 		},
 		Patterns: []Pattern{
 			{Attack, T("User-Agent に関数定義", "Function definition in User-Agent"), 10, func(r *rand.Rand) Request {
-				return withUA(atk(r, get(r, "/cgi-bin/status", "")), "() { :; }; /bin/echo wafdy-test")
+				return withUA(atk(r, get(r, "/cgi-bin/status", "")), "() { :; }; /bin/echo wafdojo-test")
 			}},
 			{Attack, T("Referer に関数定義", "Function definition in Referer"), 10, func(r *rand.Rand) Request {
-				return withHeader(atk(r, get(r, "/cgi-bin/status", "")), "Referer", "() { :; }; /bin/echo wafdy-test")
+				return withHeader(atk(r, get(r, "/cgi-bin/status", "")), "Referer", "() { :; }; /bin/echo wafdojo-test")
 			}},
 			{Attack, T("Cookie に関数定義", "Function definition in Cookie"), 10, func(r *rand.Rand) Request {
-				return withHeader(atk(r, get(r, "/cgi-bin/status", "")), "Cookie", "() { :;}; /bin/echo wafdy-test")
+				return withHeader(atk(r, get(r, "/cgi-bin/status", "")), "Cookie", "() { :;}; /bin/echo wafdojo-test")
 			}},
 			{Attack, T("独自ヘッダーに関数定義", "Function definition in a custom header"), 10, func(r *rand.Rand) Request {
-				return withHeader(atk(r, get(r, "/cgi-bin/status", "")), "X-Debug", "() { _; } >_[$($())] { /bin/echo wafdy-test; }")
+				return withHeader(atk(r, get(r, "/cgi-bin/status", "")), "X-Debug", "() { _; } >_[$($())] { /bin/echo wafdojo-test; }")
 			}},
 			{Benign, T("括弧や波括弧を含む正規のヘッダー", "Legitimate headers with parentheses and braces"), 20, func(r *rand.Rand) Request {
 				req := withHeader(get(r, "/cgi-bin/status", ""), "Referer", "https://www.example.com/sale(2026)/{new}")
@@ -271,15 +271,15 @@ func registerLabLevel1() {
 		},
 		Patterns: []Pattern{
 			{Attack, T("bash の実行", "Running bash"), 12, func(r *rand.Rand) Request {
-				req := atk(r, postJSON(r, "/mgmt/tm/util/bash", `{"command":"run","utilCmdArgs":"-c 'echo wafdy-test'"}`))
+				req := atk(r, postJSON(r, "/mgmt/tm/util/bash", `{"command":"run","utilCmdArgs":"-c 'echo wafdojo-test'"}`))
 				req = withHeader(req, "X-F5-Auth-Token", "")
 				return withHeader(req, "Authorization", "Basic YWRtaW46")
 			}},
 			{Attack, T("認証 API の呼び出し", "Calling the auth API"), 12, func(r *rand.Rand) Request {
-				return atk(r, postJSON(r, "/mgmt/shared/authn/login", `{"username":"admin","password":"wafdy"}`))
+				return atk(r, postJSON(r, "/mgmt/shared/authn/login", `{"username":"admin","password":"wafdojo"}`))
 			}},
 			{Attack, T("大文字のパス", "Uppercase path"), 12, func(r *rand.Rand) Request {
-				return atk(r, postJSON(r, "/MGMT/tm/util/bash", `{"command":"run","utilCmdArgs":"-c 'echo wafdy-test'"}`))
+				return atk(r, postJSON(r, "/MGMT/tm/util/bash", `{"command":"run","utilCmdArgs":"-c 'echo wafdojo-test'"}`))
 			}},
 			{Benign, T("mgmt で始まる正規のページ", "Legitimate pages starting with mgmt"), 20, func(r *rand.Rand) Request {
 				return get(r, pick(r, []string{"/mgmt-news/2026", "/mgmtguide.pdf", "/team/mgmt/"}), "")

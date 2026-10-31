@@ -38,22 +38,22 @@ func registerLabLevel2() {
 		},
 		Patterns: []Pattern{
 			{Attack, T("PoC そのまま (%AD)", "The PoC as published (%AD)"), 10, func(r *rand.Rand) Request {
-				req := withBody(atk(r, post(r, "/index.php", "")), "application/x-www-form-urlencoded", "<?php echo 'wafdy-test'; ?>")
+				req := withBody(atk(r, post(r, "/index.php", "")), "application/x-www-form-urlencoded", "<?php echo 'wafdojo-test'; ?>")
 				req.RawQuery = "%ADd+allow_url_include%3d1+%ADd+auto_prepend_file%3dphp://input"
 				return req
 			}},
 			{Attack, T("普通のハイフン (-d)", "Plain hyphen (-d)"), 10, func(r *rand.Rand) Request {
-				req := withBody(atk(r, post(r, "/index.php", "")), "application/x-www-form-urlencoded", "<?php echo 'wafdy-test'; ?>")
+				req := withBody(atk(r, post(r, "/index.php", "")), "application/x-www-form-urlencoded", "<?php echo 'wafdojo-test'; ?>")
 				req.RawQuery = "-d+allow_url_include%3d1+-d+auto_prepend_file%3dphp://input"
 				return req
 			}},
 			{Attack, T("設定名を大文字で", "Setting names in uppercase"), 10, func(r *rand.Rand) Request {
-				req := withBody(atk(r, post(r, "/index.php", "")), "application/x-www-form-urlencoded", "<?php echo 'wafdy-test'; ?>")
+				req := withBody(atk(r, post(r, "/index.php", "")), "application/x-www-form-urlencoded", "<?php echo 'wafdojo-test'; ?>")
 				req.RawQuery = "%ADd+ALLOW_URL_INCLUDE%3d1+%ADd+AUTO_PREPEND_FILE%3dphp://input"
 				return req
 			}},
 			{Attack, T("設定名の一部をエンコード", "Part of the setting name encoded"), 10, func(r *rand.Rand) Request {
-				req := withBody(atk(r, post(r, "/index.php", "")), "application/x-www-form-urlencoded", "<?php echo 'wafdy-test'; ?>")
+				req := withBody(atk(r, post(r, "/index.php", "")), "application/x-www-form-urlencoded", "<?php echo 'wafdojo-test'; ?>")
 				req.RawQuery = "%ADd+%61llow_url_include%3d1+%ADd+%61uto_prepend_file%3dphp://input"
 				return req
 			}},
@@ -104,7 +104,7 @@ func registerLabLevel2() {
 		},
 		Patterns: []Pattern{
 			{Attack, T("PoC そのまま (/vpn/../vpns/)", "The PoC as published (/vpn/../vpns/)"), 12, func(r *rand.Rand) Request {
-				return atk(r, post(r, "/vpn/../vpns/portal/scripts/newbm.pl", form("url", "http://example.com", "title", "wafdy", "desc", "test")))
+				return atk(r, post(r, "/vpn/../vpns/portal/scripts/newbm.pl", form("url", "http://example.com", "title", "wafdojo", "desc", "test")))
 			}},
 			{Attack, T("遡りをエンコード (%2e%2e)", "Encoded climb (%2e%2e)"), 12, func(r *rand.Rand) Request {
 				return atk(r, get(r, "/vpn/%2e%2e/vpns/cfg/smb.conf", ""))
@@ -284,7 +284,7 @@ func registerLabLevel2() {
 				return atk(r, get(r, "/server-info.action", "bootstrapStatusProvider%2EapplicationConfig%2EsetupComplete=false"))
 			}},
 			{Attack, T("管理者アカウントの作成", "Creating the administrator account"), 10, func(r *rand.Rand) Request {
-				return atk(r, post(r, "/setup/setupadministrator.action", form("username", "wafdyadmin", "fullName", "wafdy", "email", "wafdy@example.com", "password", "wafdy-test", "confirm", "wafdy-test")))
+				return atk(r, post(r, "/setup/setupadministrator.action", form("username", "wafdojoadmin", "fullName", "wafdojo", "email", "wafdojo@example.com", "password", "wafdojo-test", "confirm", "wafdojo-test")))
 			}},
 			{Benign, T("Confluence の通常の利用", "Normal Confluence use"), 25, func(r *rand.Rand) Request {
 				return get(r, pick(r, []string{"/server-info.action", "/setup-guide/index.html", "/pages/viewpage.action", "/rest/api/content"}), pick(r, []string{"", "pageId=123456", "status=current"}))
@@ -371,19 +371,19 @@ func registerLabLevel2() {
 		},
 		Patterns: []Pattern{
 			{Attack, T("%{ で始まる OGNL", "OGNL starting with %{"), 12, func(r *rand.Rand) Request {
-				return withHeader(atk(r, post(r, "/upload.action", "x")), "Content-Type", `%{(#wafdy='multipart/form-data').(#context)}`)
+				return withHeader(atk(r, post(r, "/upload.action", "x")), "Content-Type", `%{(#wafdojo='multipart/form-data').(#context)}`)
 			}},
 			{Attack, T("${ で始まる OGNL", "OGNL starting with ${"), 12, func(r *rand.Rand) Request {
-				return withHeader(atk(r, post(r, "/upload.action", "x")), "Content-Type", `${(#wafdy='multipart/form-data')}`)
+				return withHeader(atk(r, post(r, "/upload.action", "x")), "Content-Type", `${(#wafdojo='multipart/form-data')}`)
 			}},
 			{Attack, T("boundary に OGNL", "OGNL in the boundary"), 12, func(r *rand.Rand) Request {
-				return withHeader(atk(r, post(r, "/upload.action", "x")), "Content-Type", `multipart/form-data; boundary=%{(#wafdy=1)}`)
+				return withHeader(atk(r, post(r, "/upload.action", "x")), "Content-Type", `multipart/form-data; boundary=%{(#wafdojo=1)}`)
 			}},
 			{Benign, T("正規のファイルアップロード", "Legitimate file uploads"), 25, func(r *rand.Rand) Request {
 				return withHeader(post(r, "/upload.action", "x"), "Content-Type", pick(r, []string{
 					"multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW",
 					"application/x-www-form-urlencoded; charset=UTF-8",
-					"multipart/form-data; boundary=--{wafdy}--",
+					"multipart/form-data; boundary=--{wafdojo}--",
 				}))
 			}},
 			{Benign, lblBrowse, 20, browse},
@@ -392,8 +392,8 @@ func registerLabLevel2() {
 		SolutionNote: []Text{
 			T("正規表現の [%$] は「% か $ のどちらか 1 文字」を表します。そのあとに \\{ を続けて、%{ と ${ を 1 つのルールでとらえます。",
 				"In regex, [%$] means \"one character that is % or $\". Following it with \\{ catches both %{ and ${ in one rule."),
-			T("{ だけで判定すると、boundary=--{wafdy}-- のような正規の Content-Type まで止めてしまいます。",
-				"Matching on { alone would also block legitimate values such as boundary=--{wafdy}--."),
+			T("{ だけで判定すると、boundary=--{wafdojo}-- のような正規の Content-Type まで止めてしまいます。",
+				"Matching on { alone would also block legitimate values such as boundary=--{wafdojo}--."),
 		},
 	})
 
@@ -416,7 +416,7 @@ func registerLabLevel2() {
 		},
 		Patterns: []Pattern{
 			{Attack, T("ファイルのアップロード (PoC)", "File upload (PoC)"), 10, func(r *rand.Rand) Request {
-				return atk(r, withBody(post(r, "/ui/vropspluginui/rest/services/uploadova", ""), "multipart/form-data; boundary=wafdy", "--wafdy\r\nContent-Disposition: form-data; name=\"uploadFile\"; filename=\"wafdy.tar\"\r\n\r\nwafdy-test\r\n--wafdy--\r\n"))
+				return atk(r, withBody(post(r, "/ui/vropspluginui/rest/services/uploadova", ""), "multipart/form-data; boundary=wafdojo", "--wafdojo\r\nContent-Disposition: form-data; name=\"uploadFile\"; filename=\"wafdojo.tar\"\r\n\r\nwafdojo-test\r\n--wafdojo--\r\n"))
 			}},
 			{Attack, T("状態確認 API", "Status API"), 10, func(r *rand.Rand) Request {
 				return atk(r, get(r, "/ui/vropspluginui/rest/services/getstatus", ""))
@@ -585,12 +585,12 @@ func registerLabLevel2() {
 			}},
 			{Attack, T("powershell をパスの位置に", "powershell in the path position"), 10, func(r *rand.Rand) Request {
 				req := atk(r, get(r, "/autodiscover/autodiscover.json", ""))
-				req.RawQuery = "@attacker.example/powershell/?X-Rps-CAT=wafdy-test"
+				req.RawQuery = "@attacker.example/powershell/?X-Rps-CAT=wafdojo-test"
 				return req
 			}},
 			{Attack, T("1 文字をエンコード", "One character encoded"), 10, func(r *rand.Rand) Request {
 				req := atk(r, get(r, "/autodiscover/autodiscover.json", ""))
-				req.RawQuery = "@attacker.example/%50owershell/?X-Rps-CAT=wafdy-test"
+				req.RawQuery = "@attacker.example/%50owershell/?X-Rps-CAT=wafdojo-test"
 				return req
 			}},
 			{Attack, T("autodiscover もクエリに入れる", "autodiscover in the query too"), 10, func(r *rand.Rand) Request {
@@ -657,7 +657,7 @@ func registerLabLevel2() {
 		},
 		Patterns: []Pattern{
 			{Attack, T("CR LF で Set-Cookie を追加", "Adding Set-Cookie with CR LF"), 10, func(r *rand.Rand) Request {
-				return atk(r, get(r, "/redirect", "to=/home%0d%0aSet-Cookie:%20session=wafdy-test"))
+				return atk(r, get(r, "/redirect", "to=/home%0d%0aSet-Cookie:%20session=wafdojo-test"))
 			}},
 			{Attack, T("LF だけで Location を追加", "Adding Location with LF only"), 10, func(r *rand.Rand) Request {
 				return atk(r, get(r, "/redirect", "to=/home%0ALocation:%20https://attacker.example/"))
@@ -666,7 +666,7 @@ func registerLabLevel2() {
 				return atk(r, get(r, "/redirect", "to=/home%0D%0ASet-Cookie:%20admin=1"))
 			}},
 			{Attack, T("二重エンコード", "Double encoding"), 10, func(r *rand.Rand) Request {
-				return atk(r, get(r, "/redirect", "to=/home%250d%250aSet-Cookie:%20session=wafdy-test"))
+				return atk(r, get(r, "/redirect", "to=/home%250d%250aSet-Cookie:%20session=wafdojo-test"))
 			}},
 			{Benign, T("正規のリダイレクト", "Legitimate redirects"), 25, func(r *rand.Rand) Request {
 				return get(r, "/redirect", q("to", pick(r, []string{"/account", "/cart", "/search?q=shoes&page=2"})))

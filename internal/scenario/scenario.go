@@ -207,28 +207,28 @@ func (s *Scenario) PitfallBlocks(req Request) (bool, error) {
 
 // View は画面に返す公開情報。文章は 1 つの言語に絞って返す。模範解答は含めない。
 type View struct {
-	Lang        Lang     `json:"lang"`
-	ID          string   `json:"id"`
-	Title       string   `json:"title"`
-	Category    string   `json:"category"`
-	Level       int      `json:"level,omitempty"`
-	CVE         string   `json:"cve,omitempty"`
-	Conditions  []string `json:"conditions,omitempty"`
-	HasSolution bool     `json:"hasSolution"`
-	Target      string   `json:"target,omitempty"`
-	Recon       bool     `json:"recon,omitempty"`
-	Tutorial    bool     `json:"tutorial"`
-	Summary     string   `json:"summary"`
-	Topics      []string `json:"topics"`
-	Briefing    []string `json:"briefing"`
-	Lesson      []string `json:"lesson,omitempty"`
+	Lang        Lang       `json:"lang"`
+	ID          string     `json:"id"`
+	Title       string     `json:"title"`
+	Category    string     `json:"category"`
+	Level       int        `json:"level,omitempty"`
+	CVE         string     `json:"cve,omitempty"`
+	Conditions  []string   `json:"conditions,omitempty"`
+	HasSolution bool       `json:"hasSolution"`
+	Target      string     `json:"target,omitempty"`
+	Recon       bool       `json:"recon,omitempty"`
+	Tutorial    bool       `json:"tutorial"`
+	Summary     string     `json:"summary"`
+	Topics      []string   `json:"topics"`
+	Briefing    []string   `json:"briefing"`
+	Lesson      []string   `json:"lesson,omitempty"`
 	Steps       []StepView `json:"steps,omitempty"`
-	Hints       []string `json:"hints,omitempty"`
-	PrepSeconds int      `json:"prepSeconds"`
-	DurationSec int      `json:"durationSec"`
-	AttackCount int      `json:"attackCount"`
-	BenignCount int      `json:"benignCount"`
-	Samples     []Sample `json:"samples"`
+	Hints       []string   `json:"hints,omitempty"`
+	PrepSeconds int        `json:"prepSeconds"`
+	DurationSec int        `json:"durationSec"`
+	AttackCount int        `json:"attackCount"`
+	BenignCount int        `json:"benignCount"`
+	Samples     []Sample   `json:"samples"`
 }
 
 func (s *Scenario) View(l Lang) View {

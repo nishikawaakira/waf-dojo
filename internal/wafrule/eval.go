@@ -84,6 +84,15 @@ func (s *Statement) matches(req Request) (bool, error) {
 // anyValue はフィールドから値を取り出し、変換をかけてから、どれか 1 つでも一致すれば true を返す。
 // ヘッダーやクエリパラメータが存在しない場合は一致しない。
 func anyValue(req Request, f FieldToMatch, tt []TextTransformation, match func(string) (bool, error)) (bool, error) {
+	// Body が検査の上限を超えたら、Oversize handling に従う (CONTINUE なら先頭だけを検査する)
+	if f.Body != nil && len(req.Body) > BodyInspectionLimit {
+		switch f.Body.OversizeHandling {
+		case "MATCH":
+			return true, nil
+		case "NO_MATCH":
+			return false, nil
+		}
+	}
 	values, err := extract(req, f)
 	if err != nil {
 		return false, err
@@ -110,7 +119,11 @@ func extract(req Request, f FieldToMatch) ([]string, error) {
 	case f.Method != nil:
 		return []string{req.Method}, nil
 	case f.Body != nil:
-		return []string{req.Body}, nil
+		body := req.Body
+		if len(body) > BodyInspectionLimit {
+			body = body[:BodyInspectionLimit] // WAF には先頭しか渡されない
+		}
+		return []string{body}, nil
 	case f.JA4Fingerprint != nil:
 		if req.JA4 == "" {
 			return nil, nil

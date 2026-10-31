@@ -64,7 +64,11 @@ var managedGroups = map[string][]managedRule{
 			return false
 		}},
 		{"CrossSiteScripting_BODY", "CrossSiteScripting_Body", func(r Request) bool {
-			return xssPattern.MatchString(urlDecode(r.Body))
+			body := r.Body
+			if len(body) > BodyInspectionLimit {
+				body = body[:BodyInspectionLimit] // マネージドルールも先頭しか検査できない
+			}
+			return xssPattern.MatchString(urlDecode(body))
 		}},
 	},
 }

@@ -247,7 +247,16 @@ func Header(name string) FieldToMatch { return FieldToMatch{SingleHeader: &Named
 func QueryArg(name string) FieldToMatch {
 	return FieldToMatch{SingleQueryArgument: &Named{Name: name}}
 }
-func BodyField() FieldToMatch { return FieldToMatch{Body: &Body{OversizeHandling: "CONTINUE"}} }
+func BodyField() FieldToMatch { return BodyFieldOversize("CONTINUE") }
+
+// BodyFieldOversize は、Body が検査の上限を超えたときの扱い (CONTINUE / MATCH / NO_MATCH) を指定する。
+func BodyFieldOversize(handling string) FieldToMatch {
+	return FieldToMatch{Body: &Body{OversizeHandling: handling}}
+}
+
+// BodyInspectionLimit は、ALB に付けた WAF が検査できる Body の大きさ (8 KB 固定)。
+// CloudFront や API Gateway などは既定 16 KB で、64 KB まで増やせる。
+const BodyInspectionLimit = 8 * 1024
 
 // JA4 は JA4 フィンガープリントを検査対象にする (取得できなければ一致しない)。
 func JA4() FieldToMatch {

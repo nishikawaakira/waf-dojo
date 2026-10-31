@@ -111,3 +111,27 @@ func TestManagedGroupWithLabelException(t *testing.T) {
 		t.Errorf("unexpected ACL JSON:\n%s", ACLJSON(acl))
 	}
 }
+
+func TestBodyInspectionLimit(t *testing.T) {
+	hidden := Request{Path: "/comment", Body: strings.Repeat("a", BodyInspectionLimit+100) + "<script>"}
+	small := Request{Path: "/comment", Body: "x=<script>"}
+	big := Request{Path: "/upload", Body: strings.Repeat("a", BodyInspectionLimit+100)}
+	cases := []struct {
+		name     string
+		handling string
+		req      Request
+		want     bool
+	}{
+		{"CONTINUE only sees the first 8 KB, so the hidden script slips through", "CONTINUE", hidden, false},
+		{"MATCH treats any oversized body as a match", "MATCH", hidden, true},
+		{"MATCH also catches oversized bodies without a script", "MATCH", big, true},
+		{"NO_MATCH never matches oversized bodies", "NO_MATCH", hidden, false},
+		{"small bodies are inspected normally", "CONTINUE", small, true},
+	}
+	for _, c := range cases {
+		got, err := Block("t", Contains("<script>", BodyFieldOversize(c.handling))).Matches(c.req)
+		if err != nil || got != c.want {
+			t.Errorf("%s: got %v, %v; want %v", c.name, got, err, c.want)
+		}
+	}
+}

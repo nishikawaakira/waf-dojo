@@ -39,6 +39,85 @@ func randomText(r *rand.Rand, n int) string {
 func noUA(req Request) Request { return withUA(req, "") }
 
 func registerLabTuning() {
+	bodyXSS := `<\s*(script|img|svg|iframe)|\bon[a-z]+\s*=|javascript:`
+	padding := func(n int) string { return strings.Repeat("A", n) }
+	lab(4, &Scenario{
+		ID:    "lab-4-body-8kb",
+		CVE:   "Body inspection limit",
+		Title: T("8 KB の壁: Body の後ろに隠れた XSS", "The 8 KB wall: XSS hidden at the end of the body"),
+		Summary: T("XSS 対策のルールを入れているのに、口コミ欄の XSS がすり抜けました。攻撃は Body の 8 KB より後ろに隠されていました。",
+			"Your XSS rule is in place, yet XSS in the review form got through. The attack was hidden beyond the first 8 KB of the body."),
+		Topics: []Text{T("Body の検査上限", "Body inspection limits"), T("Oversize handling", "Oversize handling"), T("ALB と CloudFront の違い", "ALB vs. CloudFront")},
+		Briefing: []Text{
+			T("口コミ欄 (POST /comment) には XSS を止めるルールを入れています。ところが、XSS が書き込まれた口コミが見つかりました。調べると、その口コミは 9,000 文字以上の無意味な文字の後ろに、スクリプトが付け足されていました。",
+				"You have a rule that stops XSS in the review form (POST /comment). Yet a review containing XSS was found. On inspection, the script had been appended after more than 9,000 meaningless characters."),
+			T("ALB に付けた WAF は、リクエストの Body を先頭の 8 KB までしか検査できません。それより後ろに置かれた攻撃は、普通のルールでは見えないのです。",
+				"WAF on an ALB can only inspect the first 8 KB of a request body. Attacks placed after that are invisible to ordinary rules."),
+		},
+		Conditions: []Text{
+			T("口コミの本文は、正規の利用ではどんなに長くても 2,000 文字程度です。8 KB を超える口コミは、それだけで怪しいと考えてかまいません。",
+				"Legitimate reviews are at most about 2,000 characters. A review body over 8 KB can be treated as suspicious on its own."),
+			T("一方、ファイルのアップロード (POST /upload) では 20 KB 程度の大きな Body が正規に送られてきます。こちらは止めないでください。",
+				"Meanwhile, file uploads (POST /upload) legitimately send large bodies of around 20 KB. Don't block those."),
+		},
+		Lesson: []Text{
+			T("【Body の検査上限】WAF がリクエストの Body をどこまで検査できるかは、WAF を付けるサービスによって違います。上限を超えた部分は WAF に渡されず、検査されません。",
+				"【Body inspection limits】How much of a request body WAF can inspect depends on the service the web ACL is attached to. Anything beyond the limit isn't passed to WAF and isn't inspected."),
+			T("・ALB、AppSync: 8 KB で固定 (増やせない)", "• ALB, AppSync: fixed at 8 KB (cannot be increased)"),
+			T("・CloudFront、API Gateway、Cognito、App Runner、Verified Access: 既定は 16 KB。Web ACL の設定で 32 KB・48 KB・64 KB まで増やせる (16 KB を超える分は追加料金がかかる)",
+				"• CloudFront, API Gateway, Cognito, App Runner, Verified Access: 16 KB by default, and the web ACL setting can raise it to 32, 48, or 64 KB (inspection beyond 16 KB costs extra)"),
+			T("・ヘッダーと Cookie も、どのサービスでも先頭の 8 KB (または 200 個) までしか検査できない",
+				"• Headers and cookies can only be inspected up to the first 8 KB (or 200 entries) on every service"),
+			T("【Oversize handling】Body・JSON Body・ヘッダー・Cookie を検査するルールでは、上限を超えたときの扱いを選びます。CONTINUE は「検査できた先頭の部分だけで判定する」、MATCH は「上限を超えたら、それだけで一致したとみなす」、NO_MATCH は「上限を超えたら一致しないとみなす」です。",
+				"【Oversize handling】Rules that inspect the body, JSON body, headers, or cookies choose what happens beyond the limit. CONTINUE judges using only the inspectable first part, MATCH treats any oversized request as a match, and NO_MATCH treats it as not matching."),
+			T("【設計の考え方】大きな Body を検査したいなら、ALB の前に CloudFront を置き、CloudFront に WAF を付けると 64 KB まで検査できます。それでも上限はあるので、「上限を超えたら MATCH でブロックし、大きな Body が必要な場所だけ例外にする」という考え方は同じです。Core rule set の SizeRestrictions_BODY ルールも、同じ理由で大きな Body を止めています。",
+				"【Design thinking】To inspect larger bodies, put CloudFront in front of the ALB and attach WAF to CloudFront to inspect up to 64 KB. There's still a limit, so the same idea applies: block oversized bodies with MATCH and make exceptions only where large bodies are needed. The Core rule set's SizeRestrictions_BODY rule blocks large bodies for the same reason."),
+		},
+		Hints: []Text{
+			T("XSS を検査するルールの Body の「Oversize handling」を見直しましょう。CONTINUE のままだと、8 KB より後ろは見えません。",
+				"Revisit the body's \"Oversize handling\" in your XSS rule. With CONTINUE, anything after 8 KB is invisible."),
+			T("MATCH にすると大きなアップロードまで止まってしまうので、/upload を例外にします (AND NOT)。",
+				"MATCH would also block large uploads, so exempt /upload (AND NOT)."),
+		},
+		Patterns: []Pattern{
+			{Attack, T("8 KB の後ろに隠した script タグ", "script tag hidden after 8 KB"), 12, func(r *rand.Rand) Request {
+				return atk(r, comment(r, padding(9000)+"<script>alert(document.cookie)</script>"))
+			}},
+			{Attack, T("12 KB の後ろに隠した img onerror", "img onerror hidden after 12 KB"), 12, func(r *rand.Rand) Request {
+				return atk(r, comment(r, padding(12000)+`<img src=x onerror=alert(1)>`))
+			}},
+			{Attack, T("隠していない XSS", "XSS not hidden"), 12, func(r *rand.Rand) Request {
+				return atk(r, comment(r, `<svg onload=alert(1)>`))
+			}},
+			{Benign, T("書類の大きなアップロード", "Large document uploads"), 20, func(r *rand.Rand) Request {
+				ct, body := multipartUpload("manual.pdf", randomText(r, 20000))
+				return withBody(post(r, "/upload", ""), ct, body)
+			}},
+			{Benign, lblComment, 15, benignComment},
+			{Benign, lblBrowse, 15, browse},
+		},
+		Solution: w.Block("block-xss-in-body-or-oversized", w.And(
+			w.Regex(bodyXSS, w.BodyFieldOversize("MATCH"), w.URLDecode, w.HTMLEntityDecode, w.Lowercase),
+			w.Not(w.StartsWith("/upload", w.UriPath(), w.Lowercase)),
+		)),
+		SolutionNote: []Text{
+			T("Body の Oversize handling を MATCH にすると、8 KB を超える Body はそれだけでルールに一致します。8 KB の後ろに何が隠れていても止められます。",
+				"Setting the body's Oversize handling to MATCH makes any body over 8 KB match the rule on its own. Whatever is hidden after 8 KB gets blocked."),
+			T("MATCH は大きな Body をすべて止めるので、大きな Body が正規に必要な /upload は AND NOT で例外にします。/upload の 8 KB より後ろは WAF では検査できないので、アップロードされたファイルはアプリ側でも検査しましょう。",
+				"MATCH blocks every large body, so exempt /upload, which legitimately needs large bodies, with AND NOT. WAF can't inspect /upload beyond 8 KB, so scan uploaded files in the app as well."),
+			T("コンソールの「Contains XSS injection attacks」(XSS 一致) でも、同じ Oversize handling の設定ができます。",
+				"The console's \"Contains XSS injection attacks\" (XSS match) has the same Oversize handling setting."),
+		},
+		Pitfall: w.Block("pitfall-body-8kb", w.And(
+			w.Regex(bodyXSS, w.BodyFieldOversize("CONTINUE"), w.URLDecode, w.HTMLEntityDecode, w.Lowercase),
+			w.Not(w.StartsWith("/upload", w.UriPath(), w.Lowercase)),
+		)),
+		PitfallNote: []Text{
+			T("Oversize handling が既定の CONTINUE のままのルールです。8 KB までに書かれた XSS は止まりますが、8 KB より後ろに隠された XSS はすべてすり抜けます。",
+				"This rule leaves Oversize handling at the default, CONTINUE. XSS within the first 8 KB is stopped, but every XSS hidden after 8 KB slips through."),
+		},
+	})
+
 	lab(4, &Scenario{
 		ID:    "lab-4-crs-size-body",
 		CVE:   "AWSManagedRulesCommonRuleSet",

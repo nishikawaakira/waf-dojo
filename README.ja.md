@@ -1,5 +1,7 @@
 # WAF Dojo
 
+**本物の攻撃を防ぎながら AWS WAF を学ぶ、ハンズオンのトレーニングゲームです。**
+
 [English](README.md) | **日本語**
 
 > **管理者の方へ**: 環境の作り方・参加者への配り方・運用・片付けは [管理者ガイド (docs/ADMIN.md)](docs/ADMIN.md) に、参加者に配る説明は [プレイヤー向けのはじめ方 (docs/PLAYER_GUIDE.md)](docs/PLAYER_GUIDE.md) にまとめています。

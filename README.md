@@ -1,5 +1,7 @@
 # WAF Dojo
 
+**A hands-on training game for learning AWS WAF by defending against real attacks.**
+
 **English** | [日本語](README.ja.md)
 
 > **For administrators**: how to build the environment, hand it out to participants, run it, and clean up is covered in the [Admin guide (docs/ADMIN.md)](docs/ADMIN.md), and the handout for participants is [Getting started for players (docs/PLAYER_GUIDE.md)](docs/PLAYER_GUIDE.md). Both guides are currently in Japanese.

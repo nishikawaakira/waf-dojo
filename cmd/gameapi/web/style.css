@@ -201,3 +201,6 @@ tr.me td { background: rgba(79, 179, 255, .08); }
 .warn { color: var(--warn); }
 .spectator { border-color: var(--warn); color: var(--warn); }
 .acl-info .name-prefix { flex-basis: 100%; font-size: .85rem; }
+
+.acl-info.cloudfront { border-color: #c792ea; }
+.cf-badge { color: #c792ea; }

@@ -41,7 +41,7 @@ WAF Dojo を用意して、参加者に遊んでもらうまでの手順と、�
 | AWS アカウント | 学習専用のアカウントをおすすめします。本番や他の用途のアカウントは避けてください |
 | 権限 | 管理者に近い権限 (VPC・ALB・WAF・Lambda・DynamoDB・IAM・ACM・CloudWatch Logs を作成できること) |
 | ツール | Go 1.26 以上、Terraform 1.6 以上、AWS CLI v2、make、Python 3 |
-| 費用の目安 | 参加者 1 人あたり月 20〜35 ドル程度 (東京リージョンの ALB が約 18 ドル、Web ACL が 5 ドル、ルール 1 つにつき 1 ドルなど)。1 日あたりなら 1 人 1 ドル前後です。開催期間だけ起動し、終わったら片付けるのがおすすめです |
+| 費用の目安 | 参加者 1 人あたり月 25〜45 ドル程度 (東京リージョンの ALB が約 18 ドル、Web ACL が 2 つで 10 ドル、ルール 1 つにつき 1 ドル、CloudFront は使った分だけ、など)。1 日あたりなら 1 人 1〜1.5 ドル程度です。Body の検査上限を 16 KB より大きくすると追加料金がかかります。開催期間だけ起動し、終わったら片付けるのがおすすめです |
 
 > **必ず確認**: 作業を始める前に、AWS CLI がどのアカウントを向いているかを確認してください。手元の既定のプロファイルが別のアカウントになっていることがあります。
 >
@@ -68,6 +68,7 @@ cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 | `player_count` | 参加人数。`player1`〜`playerN` が作られる | (設定しないと、実行時に聞かれる) |
 | `players` | 参加者の名前を自分で決めたいとき (`["alice", "bob"]` など)。指定すると `player_count` より優先 | なし |
 | `create_player_users` | 参加者ごとにコンソール用の IAM ユーザーを作るか。組織のルールで IAM ユーザーを作れないときは `false` | `true` |
+| `enable_cloudfront` | 参加者ごとに CloudFront と CloudFront 用の Web ACL を作り、CloudFront の Body の検査上限を体験できるようにするか。`false` にすると CloudFront を使う問題 (ラボ Level 4 の 1 問) は遊べない | `true` |
 | `game_passcode` | ゲーム画面全体にかけるパスコード | なし |
 | `region` | リージョン | `ap-northeast-1` |
 
@@ -87,7 +88,7 @@ var.player_count
   Enter a value: 3
 ```
 
-作成内容が表示されたら `yes` を入力します。初回は 5〜10 分ほどかかります。
+作成内容が表示されたら `yes` を入力します。初回は 10〜20 分ほどかかります (CloudFront の作成に時間がかかります)。
 
 ### 3-3. 動作を確認する
 
@@ -130,7 +131,7 @@ make players
 ### 4-3. 参加者に伝えておくとよいこと
 
 - ゲーム画面とコンソールは、**それぞれの URL から開く**こと
-- AWS コンソールでは、リージョンを **アジアパシフィック (東京)** にすること
+- AWS コンソールでは、リージョンを **アジアパシフィック (東京)** にすること。ただし CloudFront を使う問題では、CloudFront 用の Web ACL (`wafdy-<自分の名前>-cf`) を **Global (CloudFront)** で開くこと
 - IP セット・正規表現パターンセットの名前は **`wafdy-<自分の名前>-` で始める**こと (それ以外の名前では作れません)
 - ルールを保存してから反映されるまで **30〜60 秒** かかること
 
@@ -211,7 +212,7 @@ make players
 
 | ログ | 場所 (CloudWatch Logs) |
 |---|---|
-| 参加者ごとの WAF ログ | `aws-waf-logs-wafdy-<参加者名>` |
+| 参加者ごとの WAF ログ | `aws-waf-logs-wafdy-<参加者名>` (CloudFront 用は us-east-1 の `aws-waf-logs-wafdy-<参加者名>-cf`) |
 | 攻撃・採点 | `/aws/lambda/wafdy-trafficgen` |
 | ゲーム画面の API | `/aws/lambda/wafdy-gameapi` |
 
@@ -224,10 +225,10 @@ aws sts get-caller-identity   # アカウントを確認
 make destroy
 ```
 
-途中で参加人数を聞かれたら、今の人数を入力します。作成内容が表示されたら `yes` を入力します。
+途中で参加人数を聞かれたら、今の人数を入力します。作成内容が表示されたら `yes` を入力します。CloudFront の削除には 10〜20 分ほどかかります。
 
 - ALB・Web ACL・Lambda・DynamoDB・IAM ユーザー・ログなど、Terraform が作ったものはすべて削除されます。スコアの記録も消えます。
-- **参加者がコンソールで作った IP セット・正規表現パターンセットは削除されません。** WAF コンソールの「IP sets」「Regex pattern sets」で、`wafdy-` で始まるものを削除してください。
+- **参加者がコンソールで作った IP セット・正規表現パターンセットは削除されません。** WAF コンソールの「IP sets」「Regex pattern sets」で、`wafdy-` で始まるものを削除してください。東京リージョンと Global (CloudFront) の両方を確認してください。
 - 削除後、ALB と Web ACL が残っていないことを確認しておくと安心です。
 
 ```sh
@@ -267,7 +268,10 @@ aws wafv2 list-web-acls --scope REGIONAL --query 'WebACLs[?starts_with(Name, `wa
 |---|---|---|
 | VPC・サブネット | `wafdy` | 1 |
 | ALB (HTTPS, 自己署名証明書) | `wafdy-<参加者>` | 参加者ごと |
-| WAF Web ACL | `wafdy-<参加者>` | 参加者ごと |
+| WAF Web ACL (ALB 用、東京リージョン) | `wafdy-<参加者>` | 参加者ごと |
+| CloudFront | コメントが `wafdy-<参加者>` | 参加者ごと |
+| WAF Web ACL (CloudFront 用、us-east-1) | `wafdy-<参加者>-cf` | 参加者ごと |
+| CloudWatch Logs (CloudFront 用 WAF ログ、us-east-1) | `aws-waf-logs-wafdy-<参加者>-cf` | 参加者ごと |
 | CloudWatch Logs (WAF ログ) | `aws-waf-logs-wafdy-<参加者>` | 参加者ごと |
 | IAM ユーザー (コンソール用) | `wafdy-<参加者>` | 参加者ごと |
 | Lambda | `wafdy-targetapp` (ダミーの EC サイト)、`wafdy-trafficgen` (攻撃・採点)、`wafdy-gameapi` (ゲーム画面) | 3 |

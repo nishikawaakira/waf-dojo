@@ -92,13 +92,21 @@ function showError(e) {
   view.innerHTML = `<p class="error">${esc(e.message)}</p>`;
 }
 
-// WAF のコンソールはグローバル (リージョン付きのホスト名では 404 になる) なので、リージョンはクエリで指定する
-function consoleUrl() {
-  return `https://console.aws.amazon.com/wafv2/homev2/web-acls?region=${encodeURIComponent(state.config.region)}`;
+// 今のシナリオが CloudFront に攻撃を送るか
+function isCloudFront(s) {
+  return s?.target === "cloudfront";
 }
 
-function currentAcl() {
-  return state.config.players.find((p) => p.name === state.player)?.webAcl ?? "";
+// WAF のコンソールはグローバル (リージョン付きのホスト名では 404 になる) なので、リージョンはクエリで指定する。
+// CloudFront の Web ACL は region=global で開く。
+function consoleUrl(s) {
+  const region = isCloudFront(s) ? "global" : state.config.region;
+  return `https://console.aws.amazon.com/wafv2/homev2/web-acls?region=${encodeURIComponent(region)}`;
+}
+
+function currentAcl(s) {
+  const p = state.config.players.find((x) => x.name === state.player);
+  return (isCloudFront(s) ? p?.cfWebAcl : p?.webAcl) ?? "";
 }
 
 function myEntry() {
@@ -142,13 +150,15 @@ function paragraph(p) {
   return `<p>${esc(p).replace(/^【(.+?)】/, "<strong>$1</strong><br>")}</p>`;
 }
 
-function aclInfo(labelKey) {
+function aclInfo(labelKey, s) {
   if (state.spectator) return `<div class="panel spectator">${t("spectator")}</div>`;
+  const cf = isCloudFront(s);
   return `
-    <div class="panel acl-info">
-      <span>${t(labelKey)}: <code>${esc(currentAcl())}</code></span>
-      <span>${t("region")}: <code>${esc(state.config.region)}</code></span>
-      <a href="${consoleUrl()}" target="_blank" rel="noopener">${t("openConsole")}</a>
+    <div class="panel acl-info ${cf ? "cloudfront" : ""}">
+      ${cf ? `<strong class="cf-badge">CloudFront</strong>` : ""}
+      <span>${t(labelKey)}: <code>${esc(currentAcl(s))}</code></span>
+      <span>${t("region")}: <code>${cf ? "Global (CloudFront) / us-east-1" : esc(state.config.region)}</code></span>
+      <a href="${consoleUrl(s)}" target="_blank" rel="noopener">${t("openConsole")}</a>
       <span class="muted name-prefix">${t("namePrefixNote", { prefix: `${currentAcl()}-` })}</span>
     </div>`;
 }
@@ -171,6 +181,7 @@ async function renderSolution(container, id) {
   }
   const notes = (xs) => (xs || []).map((n) => `<p>${esc(n)}</p>`).join("");
   container.innerHTML = `
+    ${sol.aclConfig ? `<h3>${t("aclConfig")}</h3><p class="muted">${t("aclConfigHowTo")}</p><pre>${esc(sol.aclConfig)}</pre>` : ""}
     <h3>${t("solution")}</h3>
     <p class="muted">${t("solutionHowTo")}</p>
     <div class="code-block"><button class="copy" data-copy="rule">${t("copy")}</button><pre>${esc(sol.rule)}</pre></div>
@@ -429,7 +440,7 @@ async function showScenario(id) {
     state.prep = { id, deadline: s.prepSeconds ? Date.now() + s.prepSeconds * 1000 : 0, hintUsed: false };
   }
   const prep = state.prep;
-  const fill = (x) => esc(x).replaceAll("{region}", `<code>${esc(state.config.region)}</code>`).replaceAll("{acl}", `<code>${esc(currentAcl())}</code>`);
+  const fill = (x) => esc(x).replaceAll("{region}", `<code>${esc(state.config.region)}</code>`).replaceAll("{acl}", `<code>${esc(currentAcl(s))}</code>`);
   const hintList = () => `<ul>${s.hints.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>`;
   const isLab = s.category === "lab";
   const attempted = !!myEntry().stages[s.id];
@@ -461,9 +472,9 @@ async function showScenario(id) {
     ${s.cve ? `<span class="badge cve">${esc(s.cve)}</span>${s.level ? ` <span class="badge">${t(`level${s.level}`)}</span>` : ""}` : ""}
     <h1>${esc(s.title)}</h1>
     <p>${topicBadges(s.topics)}</p>
-    ${aclInfo("aclToConfigure")}
+    ${aclInfo("aclToConfigure", s)}
     <h2>${t(isLab ? "vulnInfo" : s.tutorial ? "incomingAttack" : "attackOverview")}</h2>
-    <div class="panel">${s.briefing.map(paragraph).join("")}
+    <div class="panel">${s.briefing.map((p) => paragraph(p).replace(/\{acl\}/g, `<code>${esc(currentAcl(s))}</code>`)).join("")}
       ${s.tutorial ? "" : `<p class="muted">${t(isLab ? "labRulesNote" : "existingRulesNote")}</p>`}
       <p class="muted">${t("trafficSummary", { attack: s.attackCount, benign: s.benignCount, sec: s.durationSec })}</p>
     </div>
@@ -483,7 +494,7 @@ async function showScenario(id) {
       </div>
     </div>`;
 
-  Mascot.say(tp(mascotLineFor(s)), s.category === "exam" ? "surprised" : "normal");
+  Mascot.say(tp(isCloudFront(s) ? "m_cloudfront" : mascotLineFor(s)), s.category === "exam" ? "surprised" : "normal");
 
   view.querySelector("#show-hints")?.addEventListener("click", () => {
     if (!confirm(t("hintConfirm"))) return;
@@ -535,7 +546,7 @@ function showRunning(s, run) {
     <div class="panel">
       <p id="run-status">${t("preparing")}</p>
       <div class="progress"><div id="bar" style="width:0%"></div></div>
-      <p class="muted">${t("logsNote", { log: `aws-waf-logs-${currentAcl()}` })}</p>
+      <p class="muted">${t("logsNote", { log: `aws-waf-logs-${currentAcl(s)}${isCloudFront(s) ? " (us-east-1)" : ""}` })}</p>
     </div>`;
   Mascot.say(tp("m_running"), "surprised");
 

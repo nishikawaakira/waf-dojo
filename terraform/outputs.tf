@@ -10,6 +10,7 @@ output "players" {
       web_acl = aws_wafv2_web_acl.player[p].name
       alb_url = "https://${aws_lb.target[p].dns_name}"
       waf_log = aws_cloudwatch_log_group.waf[p].name
+      cf_url  = try("https://${aws_cloudfront_distribution.player[p].domain_name}", null)
     }
   }
 }
@@ -26,6 +27,7 @@ output "player_access" {
       console_pass   = try(aws_iam_user_login_profile.player[p].password, null)
       waf_console    = "https://console.aws.amazon.com/wafv2/homev2/web-acls?region=${var.region}"
       web_acl        = aws_wafv2_web_acl.player[p].name
+      cf_web_acl     = try(aws_wafv2_web_acl.player_cf[p].name, null)
       ipset_prefix   = "${var.project}-${p}-"
     }
   }

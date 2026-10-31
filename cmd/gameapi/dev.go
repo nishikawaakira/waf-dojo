@@ -168,7 +168,7 @@ func runDev(addr string) {
 		addr = "127.0.0.1:8080"
 	}
 	mem := newMemStore()
-	a := &app{store: mem, lambda: devInvoker{mem}, players: []string{"player1", "player2"}, region: "ap-northeast-1", project: "wafdy"}
+	a := &app{store: mem, lambda: devInvoker{mem}, players: []string{"player1", "player2"}, region: "ap-northeast-1", project: "wafdy", cloudFront: true}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		req := events.LambdaFunctionURLRequest{RawPath: r.URL.Path, Body: string(body), Headers: map[string]string{}, QueryStringParameters: map[string]string{}}

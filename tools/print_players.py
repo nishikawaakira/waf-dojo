@@ -11,5 +11,7 @@ for player, v in data.items():
     print(f"  パスワード      : {v['console_pass']}")
     print(f"  WAF コンソール  : {v['waf_console']}")
     print(f"  Web ACL         : {v['web_acl']}")
+    if v.get("cf_web_acl"):
+        print(f"  Web ACL (CloudFront): {v['cf_web_acl']}  (WAF コンソールのリージョンは Global (CloudFront))")
     print(f"  IP セット等の名前の先頭: {v['ipset_prefix']}")
     print()

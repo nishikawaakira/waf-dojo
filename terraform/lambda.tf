@@ -88,7 +88,8 @@ resource "aws_lambda_function" "trafficgen" {
     variables = {
       TABLE_NAME = aws_dynamodb_table.game.name
       # 送信先はここで決めた自分の ALB だけ
-      TARGETS = jsonencode({ for p in local.players : p => "https://${aws_lb.target[p].dns_name}" })
+      TARGETS            = jsonencode({ for p in local.players : p => "https://${aws_lb.target[p].dns_name}" })
+      TARGETS_CLOUDFRONT = jsonencode({ for p in local.cf_players : p => "https://${aws_cloudfront_distribution.player[p].domain_name}" })
     }
   }
 
@@ -138,6 +139,7 @@ resource "aws_lambda_function" "gameapi" {
       PLAYERS             = jsonencode(local.players)
       PROJECT             = var.project
       GAME_PASSCODE       = var.game_passcode
+      CLOUDFRONT_ENABLED  = tostring(var.enable_cloudfront)
       # プレイヤーごとのトークンのハッシュ。自分の URL (トークン付き) で開いた人だけが、そのプレイヤーとして遊べる
       PLAYER_TOKEN_HASHES = jsonencode({ for p in local.players : p => sha256(random_password.player_token[p].result) })
     }

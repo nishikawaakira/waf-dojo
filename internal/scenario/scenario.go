@@ -28,6 +28,9 @@ const TutorialClearScore = 70
 // ゲームとラボをすべてこの点数以上にすると WAF スペシャリストに認定される。
 const MasteryScore = 80
 
+// TargetCloudFront は、攻撃を ALB ではなくプレイヤーの CloudFront に送るシナリオ。
+const TargetCloudFront = "cloudfront"
+
 const (
 	CategoryTutorial = "tutorial"
 	CategoryGame     = "game"
@@ -101,12 +104,18 @@ type Scenario struct {
 	Solution     *wafrule.Rule
 	SolutionACL  []*wafrule.Rule
 	HideSolution bool
-	SolutionNote []Text
-	Pitfall      *wafrule.Rule
-	PitfallNote  []Text
-	Summary      Text
-	Topics       []Text
-	Briefing     []Text
+	// Target は攻撃の送り先。空なら ALB、TargetCloudFront なら CloudFront。
+	Target string
+	// SolutionBodyLimitKB / PitfallBodyLimitKB は、模範解答と失敗例で Web ACL に設定する
+	// Body の検査上限 (CloudFront のみ。0 なら既定の 16 KB)。
+	SolutionBodyLimitKB int
+	PitfallBodyLimitKB  int
+	SolutionNote        []Text
+	Pitfall             *wafrule.Rule
+	PitfallNote         []Text
+	Summary             Text
+	Topics              []Text
+	Briefing            []Text
 	// Lesson は新しい概念の解説（チュートリアル用）。
 	Lesson []Text
 	// ShowJA4 が true なら、リクエスト例に JA4 を添えて表示する。
@@ -143,12 +152,32 @@ func (s *Scenario) Category() string {
 // HasReference は、テストで確かめられる模範解答があるか。
 func (s *Scenario) HasReference() bool { return s.Solution != nil || len(s.SolutionACL) > 0 }
 
+// bodyLimit は、Web ACL に設定した上限 (KB) から、WAF が検査できる Body の大きさを返す。
+func (s *Scenario) bodyLimit(kb int) int {
+	switch {
+	case s.Target != TargetCloudFront:
+		return wafrule.BodyInspectionLimit // ALB は 8 KB で固定
+	case kb == 0:
+		return wafrule.CloudFrontDefaultBodyLimit
+	}
+	return kb * 1024
+}
+
 // ReferenceBlocks は、模範解答を入れた Web ACL がこのリクエストをブロックするかを返す。
 func (s *Scenario) ReferenceBlocks(req Request) (bool, error) {
+	view := req.WAFView()
+	view.BodyLimit = s.bodyLimit(s.SolutionBodyLimitKB)
 	if len(s.SolutionACL) > 0 {
-		return wafrule.EvaluateACL(s.SolutionACL, req.WAFView())
+		return wafrule.EvaluateACL(s.SolutionACL, view)
 	}
-	return s.Solution.Matches(req.WAFView())
+	return s.Solution.Matches(view)
+}
+
+// PitfallBlocks は、失敗例のルールを入れた Web ACL がこのリクエストをブロックするかを返す。
+func (s *Scenario) PitfallBlocks(req Request) (bool, error) {
+	view := req.WAFView()
+	view.BodyLimit = s.bodyLimit(s.PitfallBodyLimitKB)
+	return s.Pitfall.Matches(view)
 }
 
 // View は画面に返す公開情報。文章は 1 つの言語に絞って返す。模範解答は含めない。
@@ -161,6 +190,7 @@ type View struct {
 	CVE         string   `json:"cve,omitempty"`
 	Conditions  []string `json:"conditions,omitempty"`
 	HasSolution bool     `json:"hasSolution"`
+	Target      string   `json:"target,omitempty"`
 	Recon       bool     `json:"recon,omitempty"`
 	Tutorial    bool     `json:"tutorial"`
 	Summary     string   `json:"summary"`
@@ -186,6 +216,7 @@ func (s *Scenario) View(l Lang) View {
 		CVE:         s.CVE,
 		Conditions:  in(s.Conditions, l),
 		HasSolution: s.HasReference() && !s.HideSolution,
+		Target:      s.Target,
 		Recon:       s.Recon,
 		Tutorial:    s.Tutorial,
 		Summary:     s.Summary.In(l),
@@ -229,7 +260,9 @@ func (s *Scenario) View(l Lang) View {
 
 // SolutionView は模範解答。挑戦したプレイヤーにだけ返す。
 type SolutionView struct {
-	Rule        string   `json:"rule"`
+	Rule string `json:"rule"`
+	// ACLConfig は、ルールのほかに Web ACL 自体に設定する内容 (JSON)。
+	ACLConfig   string   `json:"aclConfig,omitempty"`
 	Notes       []string `json:"notes"`
 	Pitfall     string   `json:"pitfall,omitempty"`
 	PitfallNote []string `json:"pitfallNote,omitempty"`
@@ -244,6 +277,17 @@ func (s *Scenario) SolutionView(l Lang) *SolutionView {
 		v.Rule = wafrule.ACLJSON(s.SolutionACL)
 	} else {
 		v.Rule = s.Solution.JSON()
+	}
+	if s.Target == TargetCloudFront && s.SolutionBodyLimitKB > 0 {
+		v.ACLConfig = fmt.Sprintf(`{
+  "AssociationConfig": {
+    "RequestBody": {
+      "CLOUDFRONT": {
+        "DefaultSizeInspectionLimit": "KB_%d"
+      }
+    }
+  }
+}`, s.SolutionBodyLimitKB)
 	}
 	if s.Pitfall != nil {
 		v.Pitfall = s.Pitfall.JSON()

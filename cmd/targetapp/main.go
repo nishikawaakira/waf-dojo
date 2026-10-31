@@ -1,4 +1,4 @@
-// targetapp は ALB の後ろで動く学習用の EC サイト（ダミー）。
+// targetapp は学習用の EC サイト（ダミー）。ALB の後ろと、CloudFront の後ろ (Lambda Function URL) の両方で動く。
 // 実際の処理は何もせず、どのリクエストにも 200 を返す。
 // 4xx が返ったら WAF がブロックした、と生成器が判定できるようにするため。
 package main
@@ -12,33 +12,63 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 )
 
-func handler(_ context.Context, req events.ALBTargetGroupRequest) (events.ALBTargetGroupResponse, error) {
-	path := strings.ToLower(req.Path)
-	var page string
+func page(path string) []byte {
+	path = strings.ToLower(path)
+	var name string
 	switch {
 	case path == "/":
-		page = "top"
+		name = "top"
 	case strings.HasPrefix(path, "/search"):
-		page = "search"
+		name = "search"
 	case strings.HasPrefix(path, "/products/"):
-		page = "product"
+		name = "product"
 	case strings.HasPrefix(path, "/comment"):
-		page = "comment"
+		name = "comment"
 	case strings.HasPrefix(path, "/download"):
-		page = "download"
+		name = "download"
 	case strings.HasPrefix(path, "/admin"):
-		page = "admin"
+		name = "admin"
 	case strings.HasPrefix(path, "/login"):
-		page = "login"
+		name = "login"
+	case strings.HasPrefix(path, "/api/reports"):
+		name = "reports"
 	default:
-		page = "other"
+		name = "other"
 	}
-	body, _ := json.Marshal(map[string]string{"shop": "WAF Dojo demo shop", "page": page})
-	return events.ALBTargetGroupResponse{
-		StatusCode:        200,
-		StatusDescription: "200 OK",
-		Headers:           map[string]string{"Content-Type": "application/json"},
-		Body:              string(body),
+	body, _ := json.Marshal(map[string]string{"shop": "WAF Dojo demo shop", "page": name})
+	return body
+}
+
+// handler は ALB と Lambda Function URL のどちらのイベントも受け付ける。
+func handler(_ context.Context, raw json.RawMessage) (any, error) {
+	var probe struct {
+		RequestContext struct {
+			ELB *json.RawMessage `json:"elb"`
+		} `json:"requestContext"`
+	}
+	_ = json.Unmarshal(raw, &probe)
+
+	if probe.RequestContext.ELB != nil {
+		var req events.ALBTargetGroupRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			return nil, err
+		}
+		return events.ALBTargetGroupResponse{
+			StatusCode:        200,
+			StatusDescription: "200 OK",
+			Headers:           map[string]string{"Content-Type": "application/json"},
+			Body:              string(page(req.Path)),
+		}, nil
+	}
+
+	var req events.LambdaFunctionURLRequest
+	if err := json.Unmarshal(raw, &req); err != nil {
+		return nil, err
+	}
+	return events.LambdaFunctionURLResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Content-Type": "application/json"},
+		Body:       string(page(req.RawPath)),
 	}, nil
 }
 

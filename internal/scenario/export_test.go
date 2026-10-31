@@ -30,6 +30,10 @@ func TestExportLabRules(t *testing.T) {
 			name string
 			json string
 		}{{s.ID + ".solution", solution}, {s.ID + ".pitfall", pitfall}} {
+			// CloudFront 用のルールは、CheckCapacity でスコープ CLOUDFRONT を指定して確かめる
+			if s.Target == TargetCloudFront {
+				r.name += ".cloudfront"
+			}
 			if r.json == "" {
 				continue
 			}

@@ -55,6 +55,7 @@ WAF Dojo は、本物の AWS WAF にルールを設定して、実際に届く�
 - まもりんをクリックすると、ワンポイントを教えてくれます。× で隠せます。
 - 段位や実績を集めて、全問こなすと **WAF スペシャリスト** に認定されます。
 - WAF のログは、CloudWatch の Logs Insights でロググループ `aws-waf-logs-wafdy-<あなたの名前>` を選ぶと調べられます。
+- **CloudFront を使う問題** (ラボ Level 4 の「CloudFront: 16 KB の壁を 64 KB まで広げる」) だけは、攻撃が CloudFront に届きます。設定するのは CloudFront 用の Web ACL `wafdy-<あなたの名前>-cf` で、WAF コンソールのリージョンは **Global (CloudFront)** を選びます。ログはバージニア北部 (us-east-1) のロググループ `aws-waf-logs-wafdy-<あなたの名前>-cf` にあります。
 
 ## 困ったとき
 

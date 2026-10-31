@@ -17,8 +17,17 @@ type Request struct {
 	Headers  [][2]string // 名前と値（送った順）
 	Body     string
 	JA4      string
+	// BodyLimit は WAF が検査できる Body の大きさ。0 なら ALB の 8 KB。
+	BodyLimit int
 
 	labels map[string]bool // Web ACL の評価中に、前のルールが付けたラベル
+}
+
+func (r Request) bodyLimit() int {
+	if r.BodyLimit > 0 {
+		return r.BodyLimit
+	}
+	return BodyInspectionLimit
 }
 
 // Matches はルールを 1 つだけ入れた Web ACL でブロックされるかを返す。
@@ -85,7 +94,7 @@ func (s *Statement) matches(req Request) (bool, error) {
 // ヘッダーやクエリパラメータが存在しない場合は一致しない。
 func anyValue(req Request, f FieldToMatch, tt []TextTransformation, match func(string) (bool, error)) (bool, error) {
 	// Body が検査の上限を超えたら、Oversize handling に従う (CONTINUE なら先頭だけを検査する)
-	if f.Body != nil && len(req.Body) > BodyInspectionLimit {
+	if f.Body != nil && len(req.Body) > req.bodyLimit() {
 		switch f.Body.OversizeHandling {
 		case "MATCH":
 			return true, nil
@@ -120,8 +129,8 @@ func extract(req Request, f FieldToMatch) ([]string, error) {
 		return []string{req.Method}, nil
 	case f.Body != nil:
 		body := req.Body
-		if len(body) > BodyInspectionLimit {
-			body = body[:BodyInspectionLimit] // WAF には先頭しか渡されない
+		if len(body) > req.bodyLimit() {
+			body = body[:req.bodyLimit()] // WAF には先頭しか渡されない
 		}
 		return []string{body}, nil
 	case f.JA4Fingerprint != nil:

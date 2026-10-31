@@ -66,7 +66,7 @@ func TestLabSolutionsAreCorrectAndPitfallsFail(t *testing.T) {
 					t.Errorf("solution blocks benign %q: %d/%d", label, hits, n)
 				}
 				if s.Pitfall != nil {
-					ph := matchCount(t, func(r Request) (bool, error) { return s.Pitfall.Matches(r.WAFView()) }, p, n, rng)
+					ph := matchCount(t, s.PitfallBlocks, p, n, rng)
 					pitfallMissed = pitfallMissed || (p.Kind == Attack && ph < n)
 					pitfallFalsePositive = pitfallFalsePositive || (p.Kind == Benign && ph > 0)
 				}

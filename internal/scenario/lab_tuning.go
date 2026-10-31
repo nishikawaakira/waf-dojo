@@ -41,6 +41,83 @@ func noUA(req Request) Request { return withUA(req, "") }
 func registerLabTuning() {
 	bodyXSS := `<\s*(script|img|svg|iframe)|\bon[a-z]+\s*=|javascript:`
 	padding := func(n int) string { return strings.Repeat("A", n) }
+	report := func(r *rand.Rand, text string) Request {
+		return post(r, "/api/reports", form("title", "monthly", "report", text))
+	}
+	lab(4, &Scenario{
+		ID:     "lab-4-cloudfront-64kb",
+		CVE:    "Body inspection limit (CloudFront)",
+		Target: TargetCloudFront,
+		Title:  T("CloudFront: 16 KB の壁を 64 KB まで広げる", "CloudFront: pushing the 16 KB wall out to 64 KB"),
+		Summary: T("CloudFront に付けた WAF の Body の検査上限は、既定の 16 KB から 64 KB まで広げられます。大きな正規のレポートを通しつつ、奥に隠された XSS を止めてください。",
+			"WAF on CloudFront can raise its body inspection limit from the default 16 KB up to 64 KB. Let large legitimate reports through while stopping XSS hidden deep inside."),
+		Topics: []Text{T("CloudFront の Web ACL", "CloudFront web ACLs"), T("Body の検査上限の変更", "Changing the body inspection limit"), T("Oversize handling", "Oversize handling")},
+		Briefing: []Text{
+			T("この問題だけは、攻撃が ALB ではなく、あなた専用の CloudFront に届きます。設定するのは、CloudFront に付いている Web ACL ({acl}) です。CloudFront の Web ACL はグローバル (us-east-1) のリソースなので、WAF コンソールのリージョンで「Global (CloudFront)」を選びます。",
+				"For this problem only, attacks arrive at your own CloudFront distribution instead of the ALB. Configure the web ACL attached to CloudFront ({acl}). CloudFront web ACLs are global (us-east-1) resources, so choose \"Global (CloudFront)\" as the region in the WAF console."),
+			T("レポートを受け付ける POST /api/reports には、25〜50 KB の正規のレポートが送られてきます。そこに、20 KB や 45 KB、さらに 70 KB の無意味な文字の後ろに XSS を隠した投稿が混ざっています。",
+				"POST /api/reports receives legitimate reports of 25–50 KB. Mixed in are posts with XSS hidden after 20 KB, 45 KB, or even 70 KB of meaningless characters."),
+			T("攻撃も正規のレポートも同じ /api/reports に来るので、パスで例外を作ることはできません。",
+				"Attacks and legitimate reports both arrive at /api/reports, so you can't carve out a path-based exception."),
+		},
+		Conditions: []Text{
+			T("正規のレポートは最大 50 KB です。",
+				"Legitimate reports are at most 50 KB."),
+			T("CloudFront に付けた WAF は、既定では Body の先頭 16 KB までしか検査しません。Web ACL の設定で、検査する大きさを 32 KB・48 KB・64 KB に増やせます (16 KB を超える分は追加料金がかかります)。",
+				"WAF on CloudFront inspects only the first 16 KB of the body by default. The web ACL setting can raise it to 32, 48, or 64 KB (inspection beyond 16 KB costs extra)."),
+		},
+		Lesson: []Text{
+			T("【検査上限の変え方】WAF コンソールで、リージョンを「Global (CloudFront)」にして {acl} を開き、Web ACL の設定にある「Request body size limit」(CloudFront 用) を 64 KB にします。API では、Web ACL の AssociationConfig の RequestBody で DefaultSizeInspectionLimit を KB_64 にします。",
+				"【How to change the limit】In the WAF console, set the region to \"Global (CloudFront)\", open {acl}, and set the web ACL's \"Request body size limit\" (for CloudFront) to 64 KB. In the API, set DefaultSizeInspectionLimit to KB_64 under RequestBody in the web ACL's AssociationConfig."),
+			T("【上限を上げても、上限はある】64 KB にしても、それより大きな Body は残ります。上限を超えたら止める (Oversize handling を MATCH にする) ことと、正規の通信を上限の中に収めることの両方が必要です。",
+				"【Even a raised limit is a limit】Bodies larger than 64 KB still exist. You need both: block anything over the limit (Oversize handling MATCH) and keep legitimate traffic within the limit."),
+			T("【ALB との違い】ALB に付けた WAF は 8 KB で固定です。大きな Body を検査したいサービスでは、ALB の前に CloudFront を置き、CloudFront に WAF を付ける構成がよく使われます。",
+				"【Compared with ALB】WAF on an ALB is fixed at 8 KB. For services that need to inspect large bodies, a common design is to put CloudFront in front of the ALB and attach WAF to CloudFront."),
+		},
+		Hints: []Text{
+			T("既定の 16 KB のままで Oversize handling を MATCH にすると、25〜50 KB の正規のレポートまで止まってしまいます。",
+				"With the default 16 KB and Oversize handling MATCH, legitimate 25–50 KB reports get blocked too."),
+			T("検査上限を 64 KB に上げれば、50 KB までのレポートは最後まで検査できます。64 KB を超えるものは MATCH で止めましょう。",
+				"Raise the inspection limit to 64 KB so reports up to 50 KB can be inspected in full. Block anything over 64 KB with MATCH."),
+		},
+		Patterns: []Pattern{
+			{Attack, T("12 KB の後ろに隠した XSS (16 KB 以内)", "XSS hidden after 12 KB (within 16 KB)"), 8, func(r *rand.Rand) Request {
+				return atk(r, report(r, padding(12*1024)+"<script>alert(document.cookie)</script>"))
+			}},
+			{Attack, T("20 KB の後ろに隠した XSS", "XSS hidden after 20 KB"), 8, func(r *rand.Rand) Request {
+				return atk(r, report(r, padding(20*1024)+`<img src=x onerror=alert(1)>`))
+			}},
+			{Attack, T("45 KB の後ろに隠した XSS", "XSS hidden after 45 KB"), 8, func(r *rand.Rand) Request {
+				return atk(r, report(r, padding(45*1024)+`<svg onload=alert(1)>`))
+			}},
+			{Attack, T("70 KB の後ろに隠した XSS (64 KB 超え)", "XSS hidden after 70 KB (beyond 64 KB)"), 8, func(r *rand.Rand) Request {
+				return atk(r, report(r, padding(70*1024)+"<script>alert(1)</script>"))
+			}},
+			{Benign, T("25〜50 KB の正規のレポート", "Legitimate 25–50 KB reports"), 20, func(r *rand.Rand) Request {
+				return report(r, randomText(r, (25+r.IntN(25))*1024))
+			}},
+			{Benign, T("小さな正規のレポート", "Small legitimate reports"), 10, func(r *rand.Rand) Request {
+				return report(r, randomText(r, 2000))
+			}},
+			{Benign, lblBrowse, 10, browse},
+		},
+		SolutionBodyLimitKB: 64,
+		Solution:            w.Block("block-xss-in-large-reports", w.Regex(bodyXSS, w.BodyFieldOversize("MATCH"), w.URLDecode, w.HTMLEntityDecode, w.Lowercase)),
+		SolutionNote: []Text{
+			T("Web ACL の設定で Body の検査上限を 64 KB にし (上の「Web ACL の設定」)、XSS のルールの Oversize handling を MATCH にします。50 KB までの正規のレポートは最後まで検査されて通り、20 KB や 45 KB の奥に隠した XSS は見つかり、64 KB を超える Body は MATCH で止まります。",
+				"Raise the web ACL's body inspection limit to 64 KB (\"Web ACL settings\" above) and set the XSS rule's Oversize handling to MATCH. Legitimate reports up to 50 KB are inspected in full and pass, XSS hidden after 20 or 45 KB is found, and bodies over 64 KB are blocked by MATCH."),
+			T("Oversize handling を CONTINUE のままにすると、64 KB にしても 70 KB の後ろに隠した XSS はすり抜けます。上限を上げることと、上限を超えたものを止めることは、セットで考えます。",
+				"If Oversize handling stays at CONTINUE, XSS hidden after 70 KB still slips through even at 64 KB. Raising the limit and blocking what exceeds it go together."),
+			T("16 KB を超える検査には追加料金がかかります。どこまで上げるかは、正規の通信の大きさと費用のバランスで決めます。",
+				"Inspecting beyond 16 KB costs extra. Decide how far to raise it by balancing the size of legitimate traffic against the cost."),
+		},
+		Pitfall: w.Block("pitfall-cloudfront-16kb", w.Regex(bodyXSS, w.BodyFieldOversize("MATCH"), w.URLDecode, w.HTMLEntityDecode, w.Lowercase)),
+		PitfallNote: []Text{
+			T("ルールは模範解答と同じですが、Web ACL の検査上限を既定の 16 KB のままにした状態です。奥に隠した XSS は MATCH で止まりますが、25〜50 KB の正規のレポートもすべて止めてしまいます。",
+				"The rule is the same as the model answer, but the web ACL's inspection limit is left at the default 16 KB. Hidden XSS is stopped by MATCH, but every legitimate 25–50 KB report is blocked too."),
+		},
+	})
+
 	lab(4, &Scenario{
 		ID:    "lab-4-body-8kb",
 		CVE:   "Body inspection limit",

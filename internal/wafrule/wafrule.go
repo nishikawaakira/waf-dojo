@@ -255,8 +255,12 @@ func BodyFieldOversize(handling string) FieldToMatch {
 }
 
 // BodyInspectionLimit は、ALB に付けた WAF が検査できる Body の大きさ (8 KB 固定)。
-// CloudFront や API Gateway などは既定 16 KB で、64 KB まで増やせる。
-const BodyInspectionLimit = 8 * 1024
+// CloudFront や API Gateway などは既定 16 KB で、Web ACL の設定で 64 KB まで増やせる。
+const (
+	BodyInspectionLimit        = 8 * 1024
+	CloudFrontDefaultBodyLimit = 16 * 1024
+	CloudFrontMaxBodyLimit     = 64 * 1024
+)
 
 // JA4 は JA4 フィンガープリントを検査対象にする (取得できなければ一致しない)。
 func JA4() FieldToMatch {

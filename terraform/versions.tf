@@ -31,4 +31,16 @@ provider "aws" {
   }
 }
 
+# CloudFront 用の Web ACL とそのログは us-east-1 に作る必要がある
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+
+  default_tags {
+    tags = {
+      Project = var.project
+    }
+  }
+}
+
 data "aws_caller_identity" "current" {}

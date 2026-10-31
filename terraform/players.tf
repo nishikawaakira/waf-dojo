@@ -11,8 +11,28 @@ resource "random_password" "player_token" {
 }
 
 locals {
-  account_id = data.aws_caller_identity.current.account_id
-  wafv2_arn  = "arn:aws:wafv2:${var.region}:${local.account_id}:regional"
+  account_id    = data.aws_caller_identity.current.account_id
+  wafv2_arn     = "arn:aws:wafv2:${var.region}:${local.account_id}:regional"
+  wafv2_cf_arn  = "arn:aws:wafv2:us-east-1:${local.account_id}:global"
+  managed_rules = ["arn:aws:wafv2:${var.region}:*:regional/managedruleset/*/*", "arn:aws:wafv2:us-east-1:*:global/managedruleset/*/*"]
+}
+
+# プレイヤーが作れる IP セット・正規表現パターンセット (名前が <project>-<player>- で始まるもの)
+locals {
+  player_set_resources = {
+    for p in local.players : p => concat(
+      ["${local.wafv2_arn}/ipset/${var.project}-${p}-*/*", "${local.wafv2_arn}/regexpatternset/${var.project}-${p}-*/*"],
+      var.enable_cloudfront ? ["${local.wafv2_cf_arn}/ipset/${var.project}-${p}-*/*", "${local.wafv2_cf_arn}/regexpatternset/${var.project}-${p}-*/*"] : [],
+    )
+  }
+  # プレイヤー自身の Web ACL (ALB 用と CloudFront 用) と、使ってよい IP セットなど
+  player_waf_resources = {
+    for p in local.players : p => concat(
+      [aws_wafv2_web_acl.player[p].arn],
+      var.enable_cloudfront ? [aws_wafv2_web_acl.player_cf[p].arn] : [],
+      local.player_set_resources[p],
+    )
+  }
 }
 
 resource "aws_iam_user" "player" {
@@ -51,32 +71,24 @@ data "aws_iam_policy_document" "player" {
       "logs:GetQueryResults",
       "logs:StopQuery",
       "iam:GetAccountPasswordPolicy",
+      "cloudfront:ListDistributions",
+      "cloudfront:GetDistribution",
     ]
     resources = ["*"]
   }
 
   # 自分の Web ACL・IP セット・正規表現パターンセット・マネージドルールだけを読む
   statement {
-    sid     = "ReadOwnResources"
-    actions = ["wafv2:Get*"]
-    resources = [
-      aws_wafv2_web_acl.player[each.key].arn,
-      "${local.wafv2_arn}/ipset/${var.project}-${each.key}-*/*",
-      "${local.wafv2_arn}/regexpatternset/${var.project}-${each.key}-*/*",
-      "arn:aws:wafv2:${var.region}:*:regional/managedruleset/*/*",
-    ]
+    sid       = "ReadOwnResources"
+    actions   = ["wafv2:Get*"]
+    resources = concat(local.player_waf_resources[each.key], local.managed_rules)
   }
 
   # 自分の Web ACL のルールだけを変更できる (使う IP セットなども自分のものに限る)
   statement {
-    sid     = "UpdateOwnWebACL"
-    actions = ["wafv2:UpdateWebACL"]
-    resources = [
-      aws_wafv2_web_acl.player[each.key].arn,
-      "${local.wafv2_arn}/ipset/${var.project}-${each.key}-*/*",
-      "${local.wafv2_arn}/regexpatternset/${var.project}-${each.key}-*/*",
-      "arn:aws:wafv2:${var.region}:*:regional/managedruleset/*/*",
-    ]
+    sid       = "UpdateOwnWebACL"
+    actions   = ["wafv2:UpdateWebACL"]
+    resources = concat(local.player_waf_resources[each.key], local.managed_rules)
   }
 
   # 名前が <project>-<player>- で始まる IP セット / 正規表現パターンセットだけを作成・変更・削除できる
@@ -92,10 +104,7 @@ data "aws_iam_policy_document" "player" {
       "wafv2:TagResource",
       "wafv2:ListTagsForResource",
     ]
-    resources = [
-      "${local.wafv2_arn}/ipset/${var.project}-${each.key}-*/*",
-      "${local.wafv2_arn}/regexpatternset/${var.project}-${each.key}-*/*",
-    ]
+    resources = local.player_set_resources[each.key]
   }
 
   # 自分の WAF ログだけを Logs Insights で調べられる
@@ -108,10 +117,10 @@ data "aws_iam_policy_document" "player" {
       "logs:DescribeLogStreams",
       "logs:GetLogGroupFields",
     ]
-    resources = [
-      aws_cloudwatch_log_group.waf[each.key].arn,
-      "${aws_cloudwatch_log_group.waf[each.key].arn}:*",
-    ]
+    resources = concat(
+      [aws_cloudwatch_log_group.waf[each.key].arn, "${aws_cloudwatch_log_group.waf[each.key].arn}:*"],
+      var.enable_cloudfront ? [aws_cloudwatch_log_group.waf_cf[each.key].arn, "${aws_cloudwatch_log_group.waf_cf[each.key].arn}:*"] : [],
+    )
   }
 
   statement {

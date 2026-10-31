@@ -66,6 +66,8 @@ type app struct {
 	region     string
 	project    string
 	passcode   string
+	// cloudFront は、プレイヤーごとの CloudFront と CloudFront 用の Web ACL を作ってあるか。
+	cloudFront bool
 	// tokenHashes はプレイヤーごとのトークンの SHA-256 (16 進)。空ならトークンなしで誰でもどのプレイヤーとしても遊べる。
 	tokenHashes map[string]string
 }
@@ -111,6 +113,7 @@ var messages = map[string]scenario.Text{
 	"tutorialFirst":  scenario.T("先にすべてのチュートリアルをクリアしてください", "Clear all the tutorials first"),
 	"busy":           scenario.T("このプレイヤーの環境では別の攻撃が実行中です", "Another attack is already running in this player's environment"),
 	"notFound":       scenario.T("見つかりません", "Not found"),
+	"noCloudFront":   scenario.T("この環境では CloudFront を使う問題は遊べません (管理者が enable_cloudfront を無効にしています)", "CloudFront problems aren't available in this environment (the administrator disabled enable_cloudfront)"),
 	"tokenRequired":  scenario.T("プレイするには、自分専用の URL から開いてください", "Open the game from your own personal URL to play"),
 	"noSolution":     scenario.T("この問題の模範解答は公開されていません", "This problem has no published model answer"),
 	"solutionLocked": scenario.T("模範解答は一度挑戦すると見られます", "The model answer unlocks after your first attempt"),
@@ -201,6 +204,8 @@ func (a *app) config(req events.LambdaFunctionURLRequest, lang scenario.Lang) re
 	type player struct {
 		Name   string `json:"name"`
 		WebACL string `json:"webAcl"`
+		// CFWebACL は CloudFront に付いている Web ACL (CloudFront を使う問題で設定する)。
+		CFWebACL string `json:"cfWebAcl,omitempty"`
 	}
 	type summary struct {
 		ID       string   `json:"id"`
@@ -224,7 +229,11 @@ func (a *app) config(req events.LambdaFunctionURLRequest, lang scenario.Lang) re
 		Me                 string          `json:"me,omitempty"`
 	}{RequireToken: len(a.tokenHashes) > 0, Lang: lang, Langs: scenario.Langs, Region: a.region, TutorialClearScore: scenario.TutorialClearScore, MasteryScore: scenario.MasteryScore}
 	for _, name := range a.players {
-		cfg.Players = append(cfg.Players, player{name, a.project + "-" + name})
+		p := player{Name: name, WebACL: a.project + "-" + name}
+		if a.cloudFront {
+			p.CFWebACL = a.project + "-" + name + "-cf"
+		}
+		cfg.Players = append(cfg.Players, p)
 	}
 	if me, ok := a.playerFromToken(req); ok {
 		cfg.Me = me
@@ -274,6 +283,10 @@ func (a *app) startRun(ctx context.Context, req events.LambdaFunctionURLRequest,
 		if !cleared {
 			return errorResponse(http.StatusForbidden, lang, "tutorialFirst"), nil
 		}
+	}
+
+	if sc.Target == scenario.TargetCloudFront && !a.cloudFront {
+		return errorResponse(http.StatusBadRequest, lang, "noCloudFront"), nil
 	}
 
 	id := newID()
@@ -436,6 +449,7 @@ func main() {
 		region:     cfg.Region,
 		project:    os.Getenv("PROJECT"),
 		passcode:   os.Getenv("GAME_PASSCODE"),
+		cloudFront: os.Getenv("CLOUDFRONT_ENABLED") == "true",
 	}
 	if err := json.Unmarshal([]byte(os.Getenv("PLAYERS")), &a.players); err != nil || len(a.players) == 0 {
 		log.Fatal("PLAYERS must be a non-empty JSON array")

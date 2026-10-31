@@ -135,3 +135,18 @@ func TestBodyInspectionLimit(t *testing.T) {
 		}
 	}
 }
+
+func TestCloudFrontBodyLimit(t *testing.T) {
+	// 20 KB の後ろに隠した script: ALB (8 KB) と CloudFront 既定 (16 KB) では見えず、64 KB にすれば見える
+	req := Request{Path: "/api/reports", Body: strings.Repeat("a", 20*1024) + "<script>"}
+	rule := Block("t", Contains("<script>", BodyFieldOversize("CONTINUE")))
+	for _, c := range []struct {
+		limit int
+		want  bool
+	}{{0, false}, {CloudFrontDefaultBodyLimit, false}, {CloudFrontMaxBodyLimit, true}} {
+		req.BodyLimit = c.limit
+		if got, _ := rule.Matches(req); got != c.want {
+			t.Errorf("limit %d: got %v, want %v", c.limit, got, c.want)
+		}
+	}
+}

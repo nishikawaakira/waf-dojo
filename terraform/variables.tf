@@ -41,6 +41,12 @@ locals {
   players = length(var.players) > 0 ? var.players : [for i in range(var.player_count) : "player${i + 1}"]
 }
 
+variable "enable_cloudfront" {
+  description = "プレイヤーごとに CloudFront と CloudFront 用の Web ACL を作り、CloudFront の Body の検査上限を体験できるようにするか。"
+  type        = bool
+  default     = true
+}
+
 variable "game_passcode" {
   description = "ゲーム画面のパスコード。空ならパスコードなしで誰でも遊べる。"
   type        = string

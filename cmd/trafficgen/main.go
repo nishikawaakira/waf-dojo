@@ -1,5 +1,6 @@
 // trafficgen はシナリオに沿ったリクエストを、そのプレイヤー専用の ALB にだけ送り、採点する。
-// 送信先は Terraform が環境変数 TARGETS に設定した ALB に限られ、外から指定することはできない。
+// 送信先は Terraform が環境変数 TARGETS (ALB) と TARGETS_CLOUDFRONT (CloudFront) に設定した、
+// そのプレイヤー自身の環境に限られ、外から指定することはできない。
 package main
 
 import (
@@ -43,8 +44,9 @@ type job struct {
 }
 
 var (
-	targets map[string]string
-	st      *store.Store
+	targets   map[string]string
+	cfTargets map[string]string
+	st        *store.Store
 
 	clientsMu sync.Mutex
 	clients   = map[tlsprofile.Name]*http.Client{}
@@ -95,6 +97,12 @@ func execute(ctx context.Context, p Payload) (*score.Result, error) {
 		return nil, fmt.Errorf("unknown scenario %q", p.ScenarioID)
 	}
 	target, ok := targets[p.Player]
+	if sc.Target == scenario.TargetCloudFront {
+		target, ok = cfTargets[p.Player]
+		if !ok {
+			return nil, fmt.Errorf("CloudFront is not enabled for player %q", p.Player)
+		}
+	}
 	if !ok {
 		return nil, fmt.Errorf("unknown player %q", p.Player)
 	}
@@ -203,6 +211,11 @@ func send(ctx context.Context, target string, r scenario.Request) (bool, error) 
 func main() {
 	if err := json.Unmarshal([]byte(os.Getenv("TARGETS")), &targets); err != nil || len(targets) == 0 {
 		log.Fatal(errors.Join(errors.New("TARGETS must be a JSON object of player -> ALB URL"), err))
+	}
+	if v := os.Getenv("TARGETS_CLOUDFRONT"); v != "" {
+		if err := json.Unmarshal([]byte(v), &cfTargets); err != nil {
+			log.Fatal(errors.Join(errors.New("TARGETS_CLOUDFRONT must be a JSON object of player -> CloudFront URL"), err))
+		}
 	}
 	var err error
 	if st, err = store.New(context.Background()); err != nil {

@@ -452,7 +452,8 @@ async function showScenario(id) {
     : `<p class="muted">${t("noSamples")}</p>`;
 
   const guide = s.tutorial
-    ? `<h2>${t("steps")}</h2><div class="panel"><ol class="steps">${s.steps.map((x) => `<li><label><input type="checkbox">${fill(x)}</label></li>`).join("")}</ol></div>`
+    ? `<h2>${t("steps")}</h2><div class="panel"><ol class="steps">${s.steps.map((x) => `<li><label><input type="checkbox">${fill(x.text)}</label>${x.detail ? `
+         <details class="step-detail"><summary>${t("stepDetail")}</summary>${x.detail.map((p) => `<p>${fill(p)}</p>`).join("")}</details>` : ""}</li>`).join("")}</ol></div>`
     : !s.hints?.length ? "" : `<h2>${t("hints")}</h2><div class="panel" id="hints">
          ${prep.hintUsed ? hintList() : `<p class="muted">${t("hintWarning")}</p><button class="danger" id="show-hints">${t("showHints")}</button>`}
        </div>`;

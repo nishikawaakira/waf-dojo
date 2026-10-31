@@ -120,13 +120,38 @@ type Scenario struct {
 	Lesson []Text
 	// ShowJA4 が true なら、リクエスト例に JA4 を添えて表示する。
 	ShowJA4     bool
-	Steps       []Text
+	Steps       []Step
 	Hints       []Text
 	PrepSeconds int
 	Duration    time.Duration
 	// Warmup より前に送った攻撃は採点しない（レートベースルールの立ち上がり待ち）。
 	Warmup   time.Duration
 	Patterns []Pattern
+}
+
+// Step はチュートリアルの手順 1 つ。Detail は画面で折りたたんで見せる、設定項目の補足説明 (任意)。
+type Step struct {
+	Do     Text
+	Detail []Text
+}
+
+// S は手順を作る。detail を渡すと、画面に「くわしい説明」の折りたたみが付く。
+func S(do Text, detail ...Text) Step { return Step{Do: do, Detail: detail} }
+
+type StepView struct {
+	Text   string   `json:"text"`
+	Detail []string `json:"detail,omitempty"`
+}
+
+func stepsIn(steps []Step, l Lang) []StepView {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]StepView, len(steps))
+	for i, st := range steps {
+		out[i] = StepView{Text: st.Do.In(l), Detail: in(st.Detail, l)}
+	}
+	return out
 }
 
 type Sample struct {
@@ -197,7 +222,7 @@ type View struct {
 	Topics      []string `json:"topics"`
 	Briefing    []string `json:"briefing"`
 	Lesson      []string `json:"lesson,omitempty"`
-	Steps       []string `json:"steps,omitempty"`
+	Steps       []StepView `json:"steps,omitempty"`
 	Hints       []string `json:"hints,omitempty"`
 	PrepSeconds int      `json:"prepSeconds"`
 	DurationSec int      `json:"durationSec"`
@@ -223,7 +248,7 @@ func (s *Scenario) View(l Lang) View {
 		Topics:      in(s.Topics, l),
 		Briefing:    in(s.Briefing, l),
 		Lesson:      in(s.Lesson, l),
-		Steps:       in(s.Steps, l),
+		Steps:       stepsIn(s.Steps, l),
 		Hints:       in(s.Hints, l),
 		PrepSeconds: s.PrepSeconds,
 		DurationSec: int(s.Duration.Seconds()),

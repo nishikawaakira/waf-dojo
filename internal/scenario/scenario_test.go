@@ -39,6 +39,11 @@ func TestScenariosAreWellFormed(t *testing.T) {
 		if s.Tutorial && len(s.Steps) == 0 {
 			t.Errorf("%s: tutorials need steps", s.ID)
 		}
+		for i, st := range s.Steps {
+			if len(st.Detail) == 0 {
+				t.Errorf("%s: step %d needs a detail explaining its settings", s.ID, i+1)
+			}
+		}
 		if s.Category() == CategoryGame && (len(s.Hints) == 0 || s.PrepSeconds == 0) {
 			t.Errorf("%s: game stages need hints and prep time", s.ID)
 		}
@@ -81,7 +86,10 @@ func TestEveryTextIsTranslated(t *testing.T) {
 		checkAll(s.ID+".Topics", s.Topics)
 		checkAll(s.ID+".Briefing", s.Briefing)
 		checkAll(s.ID+".Lesson", s.Lesson)
-		checkAll(s.ID+".Steps", s.Steps)
+		for i, st := range s.Steps {
+			check(fmt.Sprintf("%s.Steps[%d]", s.ID, i), st.Do)
+			checkAll(fmt.Sprintf("%s.Steps[%d].Detail", s.ID, i), st.Detail)
+		}
 		checkAll(s.ID+".Hints", s.Hints)
 		checkAll(s.ID+".Conditions", s.Conditions)
 		checkAll(s.ID+".SolutionNote", s.SolutionNote)
@@ -91,7 +99,10 @@ func TestEveryTextIsTranslated(t *testing.T) {
 		}
 		// 英語の画面に日本語の文章が紛れ込んでいないか（リクエスト例の中身は除く）
 		v := s.View(English)
-		texts := append(append([]string{v.Title, v.Summary}, v.Briefing...), append(v.Steps, v.Hints...)...)
+		texts := append(append([]string{v.Title, v.Summary}, v.Briefing...), v.Hints...)
+		for _, st := range v.Steps {
+			texts = append(append(texts, st.Text), st.Detail...)
+		}
 		texts = append(append(texts, v.Conditions...), v.Topics...)
 		if sv := s.SolutionView(English); sv != nil {
 			texts = append(append(texts, sv.Notes...), sv.PitfallNote...)

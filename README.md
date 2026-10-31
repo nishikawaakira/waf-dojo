@@ -222,3 +222,24 @@ Lambda・DynamoDB・CloudWatch Logs は学習で使う程度なら少額です�
 
 - ALB はインターネットに公開されるので、ゲームと関係ないスキャンも届くことがあります。採点は生成器が送ったリクエストの応答だけで行うので、スコアには影響しません。
 - Web ACL のルールは Terraform の管理外です（`ignore_changes = [rule]`）。`terraform apply` をやり直してもプレイヤーの設定は消えません。
+
+## ライセンス
+
+このソフトウェアは [PolyForm Shield License 1.0.0](LICENSE.md) で提供しています。ソースコードは公開していますが、利用に条件があるため、オープンソースライセンスではありません。
+
+**要約 (正式な条件は英語の原文 [LICENSE.md](LICENSE.md) です)**
+
+- 個人の学習、企業・団体の社内研修、学校の授業などで、自由に利用・改変できます。
+- このソフトウェアと競合する製品やサービスを提供することはできません。たとえば、このソフトウェア (改変したものを含む) を WAF の研修サービスや学習教材として販売・提供することはできません。無料で提供する場合も競合にあたります。
+- 再配布するときは、ライセンスの本文 (または URL) と、`Required Notice:` で始まる行 (`Required Notice: Copyright Akira Nishikawa`) を一緒に渡してください。
+- 無保証です。
+
+### 利用上の注意
+
+このソフトウェアは、実際の攻撃の形を再現したリクエストを送ります。送り先はこのソフトウェアが作る環境の ALB だけですが、改変して使う場合も、**自分が管理する環境に対してだけ** 使ってください。
+
+## License
+
+This software is licensed under the [PolyForm Shield License 1.0.0](LICENSE.md). You may use and modify it for any purpose — including personal learning, internal corporate training, and classroom use — except providing a product that competes with it (for example, selling or offering it, or a modified version, as a WAF training service or course material). See [LICENSE.md](LICENSE.md) for the full terms.
+
+Required Notice: Copyright Akira Nishikawa

@@ -18,7 +18,7 @@ Play solo or compete with others.
 
 ![WAF Dojo demo](docs/demo-en.gif)
 
-The flow from reading a tutorial's attack and steps, to designing a rule in a vulnerability lab, launching the attack, and reviewing the score and model answer (about 1 minute). A higher-quality version is at [docs/demo-en.mp4](docs/demo-en.mp4).
+The flow from reading a tutorial's attack and steps, to designing a rule in a vulnerability lab, launching the attack, reviewing the score and model answer, and finally opening a contest from the admin page (about 70 seconds). A higher-quality version is at [docs/demo-en.mp4](docs/demo-en.mp4).
 
 > Recorded in development mode (`make dev`), which scores with the model answer instead of a real AWS WAF.
 

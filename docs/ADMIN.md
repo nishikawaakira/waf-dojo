@@ -110,21 +110,21 @@ make players
 
 ```
 === player1 ===
-  ゲーム画面      : https://xxxx.lambda-url.ap-northeast-1.on.aws/?player=player1&token=...
-  コンソール      : https://<アカウントID>.signin.aws.amazon.com/console
-  IAM ユーザー名  : wafdojo-player1
-  パスワード      : ...
-  WAF コンソール  : https://console.aws.amazon.com/wafv2/homev2/web-acls?region=ap-northeast-1
-  Web ACL         : wafdojo-player1
-  IP セット等の名前の先頭: wafdojo-player1-
+  Game URL         : https://xxxx.lambda-url.ap-northeast-1.on.aws/?player=player1&token=...
+  Console sign-in  : https://<アカウントID>.signin.aws.amazon.com/console
+  IAM user name    : wafdojo-player1
+  Password         : ...
+  WAF console      : https://console.aws.amazon.com/wafv2/homev2/web-acls?region=ap-northeast-1
+  Web ACL          : wafdojo-player1
+  Name prefix for IP sets etc.: wafdojo-player1-
 ```
 
 ### 4-2. 1 人ずつ、本人にだけ渡す
 
 参加者には、自分の分だけを、本人にだけ (DM やパスワード付きのメモなどで) 渡してください。
 
-- **ゲーム画面の URL**: 秘密のトークンが入っています。この URL を知っている人は、その参加者としてプレイできます。
-- **IAM ユーザー名とパスワード**: AWS コンソールへのログイン用です。
+- **ゲーム画面の URL (Game URL)**: 秘密のトークンが入っています。この URL を知っている人は、その参加者としてプレイできます。
+- **IAM ユーザー名とパスワード (IAM user name / Password)**: AWS コンソールへのログイン用です。
 
 あわせて [プレイヤー向けのはじめ方](PLAYER_GUIDE.md) を共有してください。
 

@@ -13,7 +13,7 @@ test:
 	go vet ./...
 	go test ./...
 
-# AWS なしで画面を確かめるローカルサーバー (http://127.0.0.1:8080)
+# Local server to try the game screens without AWS (http://127.0.0.1:8080)
 dev:
 	WAFDY_DEV=1 go run ./cmd/gameapi
 
@@ -21,15 +21,15 @@ deploy: test build
 	$(TF) init -input=false
 	$(TF) apply
 
-# 各プレイヤーに配る情報 (ゲーム URL・コンソールの ID とパスワード) を表示する
+# Print what to hand out to each player (game URL, console user name and password)
 players:
 	@terraform -chdir=terraform output -json player_access | python3 tools/print_players.py
 
-# 管理者ページ (競技の開始・終了) の URL を表示する
+# Print the URL of the admin page (start and end contests)
 admin:
 	@terraform -chdir=terraform output -raw admin_url; echo
 
-# プレイヤーの Web ACL のルールを空に戻す / スコアの記録を消す (例: make reset-rules PLAYER=player1)
+# Empty a player's Web ACL rules / delete their score records (e.g. make reset-rules PLAYER=player1)
 reset-rules:
 	@tools/reset_player.sh rules $(PLAYER)
 

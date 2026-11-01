@@ -1,16 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <!-- まもりん (柴犬の道場生) の顔を、小さいサイズでも見分けやすいように単純化したもの -->
-  <path d="M8 26 L13 3 L28 17 Z" fill="#e8913a"/>
-  <path d="M56 26 L51 3 L36 17 Z" fill="#e8913a"/>
-  <path d="M12 22 L15 9 L23 17 Z" fill="#fbd3a5"/>
-  <path d="M52 22 L49 9 L41 17 Z" fill="#fbd3a5"/>
-  <ellipse cx="32" cy="36" rx="27" ry="24" fill="#f2a65a"/>
-  <ellipse cx="32" cy="46" rx="18" ry="13" fill="#fff6ea"/>
-  <rect x="6" y="20" width="52" height="7" rx="3.5" fill="#e63946"/>
-  <circle cx="22" cy="36" r="3.6" fill="#2b2d42"/>
-  <circle cx="42" cy="36" r="3.6" fill="#2b2d42"/>
-  <ellipse cx="32" cy="43" rx="3.6" ry="2.6" fill="#2b2d42"/>
-  <path d="M27 47.5 q5 4.5 10 0" stroke="#2b2d42" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-  <ellipse cx="15" cy="44" rx="4" ry="2.6" fill="#ff8fa3" opacity=".6"/>
-  <ellipse cx="49" cy="44" rx="4" ry="2.6" fill="#ff8fa3" opacity=".6"/>
+  <path d="M6 30 Q5 12 14 4 Q23 10 27 18 Z" fill="#e8913a"/>
+  <path d="M10 25 Q10 15 14.5 10 Q20 14 23 19 Z" fill="#fbd3a5"/>
+  <path d="M58 30 Q59 12 50 4 Q41 10 37 18 Z" fill="#e8913a"/>
+  <path d="M54 25 Q54 15 49.5 10 Q44 14 41 19 Z" fill="#fbd3a5"/>
+  <path d="M32 13 C48 13 60 23 60 38 C60 52 48 61 32 61 C16 61 4 52 4 38 C4 23 16 13 32 13 Z" fill="#f2a65a"/>
+  <path d="M5 42 C9 57 21 61 32 61 C43 61 55 57 59 42 C53 37 46 37 41 41 C37 38 34 38 32 40 C30 38 27 38 23 41 C18 37 11 37 5 42 Z" fill="#fff6ea"/>
+  <ellipse cx="22" cy="28" rx="3.2" ry="2" fill="#fff6ea"/>
+  <ellipse cx="42" cy="28" rx="3.2" ry="2" fill="#fff6ea"/>
+  <rect x="5" y="17" width="54" height="6" rx="3" fill="#e63946"/>
+  <circle cx="22" cy="34" r="3.2" fill="#2b2d42"/>
+  <circle cx="42" cy="34" r="3.2" fill="#2b2d42"/>
+  <path d="M26.5 41.5 Q32 39 37.5 41.5 Q36.5 46 32 47 Q27.5 46 26.5 41.5 Z" fill="#2b2d42"/>
+  <path d="M32 46.5 v2 M27 48.5 q2.5 3.2 5 0 q2.5 3.2 5 0" stroke="#2b2d42" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

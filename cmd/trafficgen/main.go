@@ -34,6 +34,8 @@ type Payload struct {
 	ScenarioID string `json:"scenarioId"`
 	HintUsed   bool   `json:"hintUsed"`
 	Recon      bool   `json:"recon"`
+	// ContestID は競技中の実行のときだけ入る。練習の記録に加えて、競技の記録も残す。
+	ContestID string `json:"contestId,omitempty"`
 }
 
 type job struct {
@@ -84,8 +86,13 @@ func handler(ctx context.Context, p Payload) error {
 	}
 	// 画面は FinishRun を見て結果を表示し、すぐ模範解答を取りに来るので、ベストスコアを先に記録する
 	if err == nil && !p.Recon { // 偵察は採点しないので記録しない
-		if berr := st.RecordBest(ctx, store.Best{Player: p.Player, ScenarioID: p.ScenarioID, Score: res.Score, HintUsed: p.HintUsed, RunID: p.RunID}); berr != nil {
+		best := store.Best{Player: p.Player, ScenarioID: p.ScenarioID, Score: res.Score, HintUsed: p.HintUsed, RunID: p.RunID}
+		if berr := st.RecordBest(ctx, best); berr != nil {
 			err = berr
+		}
+		if p.ContestID != "" && err == nil {
+			best.Contest = p.ContestID
+			err = st.RecordBest(ctx, best)
 		}
 	}
 	return st.FinishRun(context.WithoutCancel(ctx), p.RunID, res, err)

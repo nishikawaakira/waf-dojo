@@ -5,6 +5,8 @@
 //	RUN#<id>       / META            実行 1 回分
 //	LOCK#<player>  / LOCK            プレイヤーごとの同時実行防止
 //	PLAYER#<name>  / STAGE#<id>      ステージごとのベストスコア
+//	CONTEST        / CURRENT         開催中 (または終了後に表示中) の競技
+//	CONTEST#<id>   / PLAYER#<name>#STAGE#<id>  競技中のベストスコア (練習の記録とは別)
 package store
 
 import (
@@ -57,6 +59,37 @@ type Best struct {
 	HintUsed   bool   `dynamodbav:"hintUsed" json:"hintUsed"`
 	RunID      string `dynamodbav:"runId" json:"runId"`
 	UpdatedAt  int64  `dynamodbav:"updatedAt" json:"updatedAt"`
+	// Contest は競技の ID。空なら練習の記録。
+	Contest string `dynamodbav:"contest,omitempty" json:"-"`
+}
+
+// Contest は管理者が開く競技。出題する問題と終了時刻を持つ。
+type Contest struct {
+	PK        string   `dynamodbav:"pk" json:"-"`
+	SK        string   `dynamodbav:"sk" json:"-"`
+	ID        string   `dynamodbav:"id" json:"id"`
+	Title     string   `dynamodbav:"title" json:"title"`
+	Scenarios []string `dynamodbav:"scenarios" json:"scenarios"`
+	StartedAt int64    `dynamodbav:"startedAt" json:"startedAt"`
+	// EndsAt は終了予定の時刻 (ミリ秒)。0 なら時間制限なし。
+	EndsAt int64 `dynamodbav:"endsAt" json:"endsAt"`
+	// EndedAt は管理者が終了した時刻 (ミリ秒)。0 ならまだ終了していない。
+	EndedAt int64 `dynamodbav:"endedAt" json:"endedAt"`
+}
+
+// Running は競技が続いているか (攻撃を開始できるか) を返す。
+func (c *Contest) Running(now time.Time) bool {
+	return c.EndedAt == 0 && (c.EndsAt == 0 || now.UnixMilli() < c.EndsAt)
+}
+
+// Includes はその問題が出題されているかを返す。
+func (c *Contest) Includes(scenarioID string) bool {
+	for _, id := range c.Scenarios {
+		if id == scenarioID {
+			return true
+		}
+	}
+	return false
 }
 
 var ErrLocked = errors.New("another run is in progress")
@@ -201,15 +234,25 @@ func (s *Store) ReleaseLock(ctx context.Context, player, runID string) error {
 	return err
 }
 
-// RecordBest はスコアが自己ベストを上回ったときだけ保存する。
+func bestKey(b Best) map[string]types.AttributeValue {
+	if b.Contest != "" {
+		return map[string]types.AttributeValue{
+			"pk": str("CONTEST#" + b.Contest),
+			"sk": str("PLAYER#" + b.Player + "#STAGE#" + b.ScenarioID),
+		}
+	}
+	return map[string]types.AttributeValue{
+		"pk": str("PLAYER#" + b.Player),
+		"sk": str("STAGE#" + b.ScenarioID),
+	}
+}
+
+// RecordBest はスコアが自己ベストを上回ったときだけ保存する。b.Contest があれば、その競技の記録として保存する。
 func (s *Store) RecordBest(ctx context.Context, b Best) error {
 	b.UpdatedAt = time.Now().Unix()
 	_, err := s.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName: &s.table,
-		Key: map[string]types.AttributeValue{
-			"pk": str("PLAYER#" + b.Player),
-			"sk": str("STAGE#" + b.ScenarioID),
-		},
+		TableName:           &s.table,
+		Key:                 bestKey(b),
 		UpdateExpression:    aws.String("SET #player = :p, #scenarioId = :sc, #score = :s, #hintUsed = :h, #runId = :r, #updatedAt = :u"),
 		ConditionExpression: aws.String("attribute_not_exists(pk) OR #score < :s"),
 		ExpressionAttributeNames: map[string]string{
@@ -230,10 +273,7 @@ func (s *Store) RecordBest(ctx context.Context, b Best) error {
 func (s *Store) GetBest(ctx context.Context, player, scenarioID string) (*Best, error) {
 	out, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.table,
-		Key: map[string]types.AttributeValue{
-			"pk": str("PLAYER#" + player),
-			"sk": str("STAGE#" + scenarioID),
-		},
+		Key:       bestKey(Best{Player: player, ScenarioID: scenarioID}),
 	})
 	if err != nil || out.Item == nil {
 		return nil, err
@@ -262,4 +302,56 @@ func (s *Store) ListBest(ctx context.Context) ([]Best, error) {
 		bests = append(bests, items...)
 	}
 	return bests, nil
+}
+
+// ListContestBest は競技中の全プレイヤーのベストスコアを返す。
+func (s *Store) ListContestBest(ctx context.Context, contestID string) ([]Best, error) {
+	var bests []Best
+	p := dynamodb.NewQueryPaginator(s.db, &dynamodb.QueryInput{
+		TableName:                 &s.table,
+		KeyConditionExpression:    aws.String("pk = :p"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{":p": str("CONTEST#" + contestID)},
+	})
+	for p.HasMorePages() {
+		page, err := p.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		var items []Best
+		if err := attributevalue.UnmarshalListOfMaps(page.Items, &items); err != nil {
+			return nil, err
+		}
+		bests = append(bests, items...)
+	}
+	return bests, nil
+}
+
+func contestKey() map[string]types.AttributeValue {
+	return map[string]types.AttributeValue{"pk": str("CONTEST"), "sk": str("CURRENT")}
+}
+
+// GetContest は今の競技を返す。競技がなければ (通常モード) nil。
+func (s *Store) GetContest(ctx context.Context) (*Contest, error) {
+	out, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{TableName: &s.table, Key: contestKey(), ConsistentRead: aws.Bool(true)})
+	if err != nil || out.Item == nil {
+		return nil, err
+	}
+	var c Contest
+	return &c, attributevalue.UnmarshalMap(out.Item, &c)
+}
+
+func (s *Store) PutContest(ctx context.Context, c *Contest) error {
+	c.PK, c.SK = "CONTEST", "CURRENT"
+	item, err := attributevalue.MarshalMap(c)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.PutItem(ctx, &dynamodb.PutItemInput{TableName: &s.table, Item: item})
+	return err
+}
+
+// DeleteContest は通常モードに戻す。競技の記録 (CONTEST#<id>) は残す。
+func (s *Store) DeleteContest(ctx context.Context) error {
+	_, err := s.db.DeleteItem(ctx, &dynamodb.DeleteItemInput{TableName: &s.table, Key: contestKey()})
+	return err
 }

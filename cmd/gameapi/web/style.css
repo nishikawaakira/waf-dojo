@@ -207,3 +207,25 @@ tr.me td { background: rgba(79, 179, 255, .08); }
 
 .acl-info.cloudfront { border-color: #c792ea; }
 .cf-badge { color: #c792ea; }
+
+/* 競技モード・管理者ページ */
+.badge.contest { color: #04121f; background: var(--warn); border-color: var(--warn); font-weight: 700; }
+.badge.q { color: var(--accent); border-color: var(--accent); font-weight: 700; }
+.contest-head { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: center; justify-content: space-between; border-color: var(--warn); }
+.contest-head.done { border-color: var(--border); }
+.contest-head h2 { margin: 8px 0 4px; }
+.contest-head > p { flex: 1 1 360px; margin: 0; }
+.table-scroll { overflow-x: auto; }
+.table-scroll td.ok { color: var(--benign); }
+.admin-link { align-self: center; padding: 6px 12px; border: 1px solid var(--warn); border-radius: 8px; color: var(--warn); text-decoration: none; font-weight: 700; }
+.admin-form { display: flex; flex-wrap: wrap; gap: 16px; }
+.admin-form label { display: flex; flex-direction: column; gap: 6px; flex: 1 1 240px; }
+.admin-form input { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel-2); color: inherit; font: inherit; }
+fieldset.pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 6px 16px; }
+fieldset.pick legend { padding: 0 6px; font-weight: 700; }
+fieldset.pick label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+button.link { background: none; border: none; color: var(--accent); padding: 0 0 0 8px; font-size: .85rem; }
+@media (max-width: 640px) { fieldset.pick { grid-template-columns: 1fr; } }
+fieldset.pick input { padding: 0; }
+.card-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+fieldset.pick .badge { white-space: nowrap; }

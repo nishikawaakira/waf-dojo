@@ -10,6 +10,12 @@ resource "random_password" "player_token" {
   special = false
 }
 
+# 管理者ページ (競技の開始・終了) を開くためのトークン
+resource "random_password" "admin_token" {
+  length  = 32
+  special = false
+}
+
 locals {
   account_id    = data.aws_caller_identity.current.account_id
   wafv2_arn     = "arn:aws:wafv2:${var.region}:${local.account_id}:regional"

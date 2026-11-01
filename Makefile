@@ -1,7 +1,7 @@
 FUNCS := targetapp trafficgen gameapi
 TF := terraform -chdir=terraform
 
-.PHONY: build test dev deploy destroy clean players reset-rules reset-scores
+.PHONY: build test dev deploy destroy clean players admin reset-rules reset-scores
 
 build:
 	@for f in $(FUNCS); do \
@@ -24,6 +24,10 @@ deploy: test build
 # 各プレイヤーに配る情報 (ゲーム URL・コンソールの ID とパスワード) を表示する
 players:
 	@terraform -chdir=terraform output -json player_access | python3 tools/print_players.py
+
+# 管理者ページ (競技の開始・終了) の URL を表示する
+admin:
+	@terraform -chdir=terraform output -raw admin_url; echo
 
 # プレイヤーの Web ACL のルールを空に戻す / スコアの記録を消す (例: make reset-rules PLAYER=player1)
 reset-rules:

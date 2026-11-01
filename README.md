@@ -142,6 +142,10 @@ Clear every tutorial and score 80 or higher on all 52 other challenges (6 game, 
 
 Add scenarios by calling `register(...)` (or `lab(level, ...)` for labs) in the files under `internal/scenario/`. If you also write a model answer for a lab, the tests verify its correctness automatically.
 
+### Contest mode
+
+An administrator can open a contest from the admin page (`make admin` prints its URL): pick any game, lab, ops, or exam problems and an optional time limit. Every player's screen switches to the contest, where they can solve the chosen problems right away without the tutorials. Hints are allowed (×0.8), model answers unlock when the contest ends, and the contest leaderboard ranks players by the sum of their best scores (ties go to whoever got there first). Contest scores are recorded separately from practice records. See the [admin guide](docs/ADMIN.md) for details.
+
 ## Languages
 
 The UI supports Japanese and English, switchable from "Language" in the header. The initial choice follows the browser's language settings, and your choice is saved in the browser.

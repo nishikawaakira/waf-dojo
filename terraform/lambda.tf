@@ -106,7 +106,7 @@ resource "aws_lambda_function_event_invoke_config" "trafficgen" {
 
 data "aws_iam_policy_document" "gameapi" {
   statement {
-    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Scan"]
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Scan", "dynamodb:Query"]
     resources = [aws_dynamodb_table.game.arn]
   }
 
@@ -142,6 +142,8 @@ resource "aws_lambda_function" "gameapi" {
       CLOUDFRONT_ENABLED  = tostring(var.enable_cloudfront)
       # プレイヤーごとのトークンのハッシュ。自分の URL (トークン付き) で開いた人だけが、そのプレイヤーとして遊べる
       PLAYER_TOKEN_HASHES = jsonencode({ for p in local.players : p => sha256(random_password.player_token[p].result) })
+      # 管理者のトークンのハッシュ。管理者用の URL で開いた人だけが競技を開始・終了できる
+      ADMIN_TOKEN_HASH = sha256(random_password.admin_token.result)
     }
   }
 

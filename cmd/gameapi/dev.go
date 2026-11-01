@@ -31,10 +31,13 @@ type memStore struct {
 	runs  map[string]store.Run
 	bests map[string]store.Best
 	locks map[string]string
+	// contest は今の競技。contestBests は競技ごとの記録 (キーは競技 ID/プレイヤー/問題)。
+	contest      *store.Contest
+	contestBests map[string]store.Best
 }
 
 func newMemStore() *memStore {
-	return &memStore{runs: map[string]store.Run{}, bests: map[string]store.Best{}, locks: map[string]string{}}
+	return &memStore{runs: map[string]store.Run{}, bests: map[string]store.Best{}, locks: map[string]string{}, contestBests: map[string]store.Best{}}
 }
 
 func (m *memStore) GetRun(_ context.Context, id string) (*store.Run, error) {
@@ -114,10 +117,51 @@ func (m *memStore) ListBest(context.Context) ([]store.Best, error) {
 func (m *memStore) recordBest(b store.Best) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	key := b.Player + "/" + b.ScenarioID
-	if old, ok := m.bests[key]; !ok || old.Score < b.Score {
-		m.bests[key] = b
+	b.UpdatedAt = time.Now().Unix()
+	bests, key := m.bests, b.Player+"/"+b.ScenarioID
+	if b.Contest != "" {
+		bests, key = m.contestBests, b.Contest+"/"+key
 	}
+	if old, ok := bests[key]; !ok || old.Score < b.Score {
+		bests[key] = b
+	}
+}
+
+func (m *memStore) ListContestBest(_ context.Context, contestID string) ([]store.Best, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []store.Best
+	for _, b := range m.contestBests {
+		if b.Contest == contestID {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+
+func (m *memStore) GetContest(context.Context) (*store.Contest, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.contest == nil {
+		return nil, nil
+	}
+	c := *m.contest
+	return &c, nil
+}
+
+func (m *memStore) PutContest(_ context.Context, c *store.Contest) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := *c
+	m.contest = &cp
+	return nil
+}
+
+func (m *memStore) DeleteContest(context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.contest = nil
+	return nil
 }
 
 // devInvoker はトラフィック生成 Lambda の代わりに、その場で採点する。
@@ -125,17 +169,17 @@ type devInvoker struct{ store *memStore }
 
 func (d devInvoker) Invoke(_ context.Context, in *awslambda.InvokeInput, _ ...func(*awslambda.Options)) (*awslambda.InvokeOutput, error) {
 	var p struct {
-		RunID, Player, ScenarioID string
-		HintUsed, Recon           bool
+		RunID, Player, ScenarioID, ContestID string
+		HintUsed, Recon                      bool
 	}
 	if err := json.Unmarshal(in.Payload, &p); err != nil {
 		return nil, err
 	}
-	go d.run(p.RunID, p.Player, p.ScenarioID, p.HintUsed, p.Recon)
+	go d.run(p.RunID, p.Player, p.ScenarioID, p.ContestID, p.HintUsed, p.Recon)
 	return &awslambda.InvokeOutput{StatusCode: http.StatusAccepted}, nil
 }
 
-func (d devInvoker) run(id, player, scenarioID string, hintUsed, recon bool) {
+func (d devInvoker) run(id, player, scenarioID, contestID string, hintUsed, recon bool) {
 	sc, _ := scenario.Get(scenarioID)
 	d.store.update(id, func(r *store.Run) { r.Status, r.StartedAt = store.StatusRunning, time.Now().UnixMilli() })
 	time.Sleep(3 * time.Second)
@@ -157,7 +201,12 @@ func (d devInvoker) run(id, player, scenarioID string, hintUsed, recon bool) {
 	}
 	res := score.Compute(outcomes, hintUsed)
 	if !recon {
-		d.store.recordBest(store.Best{Player: player, ScenarioID: scenarioID, Score: res.Score, HintUsed: hintUsed, RunID: id})
+		best := store.Best{Player: player, ScenarioID: scenarioID, Score: res.Score, HintUsed: hintUsed, RunID: id}
+		d.store.recordBest(best)
+		if contestID != "" {
+			best.Contest = contestID
+			d.store.recordBest(best)
+		}
 	}
 	_ = d.store.FinishRun(context.Background(), id, &res, nil)
 	_ = d.store.ReleaseLock(context.Background(), player, id)

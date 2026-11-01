@@ -32,3 +32,9 @@ output "player_access" {
     }
   }
 }
+
+output "admin_url" {
+  description = "管理者ページ (競技の開始・終了) の URL。管理者だけが持つこと"
+  sensitive   = true
+  value       = "${aws_lambda_function_url.gameapi.function_url}?admin=${random_password.admin_token.result}#/admin"
+}

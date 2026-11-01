@@ -69,6 +69,8 @@ async function api(path, options = {}) {
   if (passcode) headers["X-Wafdy-Passcode"] = passcode;
   const token = storageGet("wafdy.token");
   if (token) headers["X-Wafdy-Token"] = token;
+  const admin = storageGet("wafdy.admin");
+  if (admin) headers["X-Wafdy-Admin"] = admin;
   const url = `${path}${path.includes("?") ? "&" : "?"}lang=${encodeURIComponent(state.lang)}`;
   const res = await fetch(url, { ...options, headers });
   if (res.status === 401) {
@@ -190,6 +192,271 @@ async function renderSolution(container, id) {
   container.querySelector("[data-copy]").addEventListener("click", (e) => copyText(e.target, sol.rule));
 }
 
+// ---------- 競技モード ----------
+
+// 開催中 (または終了後に表示中) の競技。なければ null (通常モード)。
+function contest() {
+  return state.config?.contest ?? null;
+}
+
+// サーバーの時刻。残り時間を、端末の時計のずれに左右されずに出す。
+function serverNow() {
+  return Date.now() + (state.clockOffset || 0);
+}
+
+function contestRunning(c = contest()) {
+  return !!c && !c.endedAt && (!c.endsAt || serverNow() < c.endsAt);
+}
+
+function inContest(id) {
+  return !!contest()?.scenarios.includes(id);
+}
+
+function scenarioById(id) {
+  return state.config.scenarios.find((s) => s.id === id);
+}
+
+async function refreshContest() {
+  const r = await api("/api/contest");
+  state.config.contest = r.contest;
+  state.contestBoard = r.leaderboard;
+  state.clockOffset = r.now - Date.now();
+}
+
+function clock(ms) {
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(sec / 3600);
+  const mm = String(Math.floor((sec % 3600) / 60)).padStart(h ? 2 : 1, "0");
+  return `${h ? `${h}:` : ""}${mm}:${String(sec % 60).padStart(2, "0")}`;
+}
+
+function timeOf(ms) {
+  return new Date(ms).toLocaleTimeString(state.lang, { hour: "2-digit", minute: "2-digit" });
+}
+
+// 競技の残り時間 (または「時間制限なし」「終了」) の表示
+function contestClock(c = contest()) {
+  if (!contestRunning(c)) return t("contestEndedShort");
+  return c.endsAt ? clock(c.endsAt - serverNow()) : t("contestNoLimit");
+}
+
+// 残り時間を 1 秒ごとに書き換え、終了の時刻になったら onEnd を呼ぶ
+function tickContestClock(el, onEnd) {
+  const c = contest();
+  const tick = () => {
+    el.textContent = contestClock(c);
+    el.classList.toggle("low", contestRunning(c) && !!c.endsAt && c.endsAt - serverNow() <= 5 * 60 * 1000);
+    if (c.endsAt && !c.endedAt && serverNow() >= c.endsAt) {
+      clearInterval(state.timer);
+      onEnd?.();
+    }
+  };
+  tick();
+  if (contestRunning(c) && c.endsAt) state.timer = setInterval(tick, 1000);
+}
+
+function contestBoardHtml(c, entries) {
+  const head = c.scenarios.map((id, i) => `<th class="num" title="${esc(scenarioById(id)?.title)}">Q${i + 1}</th>`).join("");
+  const rows = entries.map((e, i) => `
+    <tr class="${e.player === state.player ? "me" : ""}">
+      <td>${i + 1}</td>
+      <td>${esc(e.player)}</td>
+      ${c.scenarios.map((id) => {
+        const b = e.scores[id];
+        return `<td class="num ${b && b.score >= state.config.masteryScore ? "ok" : ""}">${b ? `${b.score}${b.hintUsed ? " 💡" : ""}` : "—"}</td>`;
+      }).join("")}
+      <td class="num">${e.solved} / ${c.scenarios.length}</td>
+      <td class="num"><strong>${e.total}</strong></td>
+    </tr>`).join("");
+  return `
+    <div class="panel table-scroll">
+      <table>
+        <thead><tr><th>#</th><th>${t("colPlayer")}</th>${head}<th class="num">${t("colMastered")}</th><th class="num">${t("colTotal")}</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="muted">${t("contestBoardNote", { score: state.config.masteryScore })}</p>
+    </div>`;
+}
+
+async function showContestLobby() {
+  const c = contest();
+  const running = contestRunning(c);
+  const me = state.contestBoard.find((e) => e.player === state.player);
+  const card = (s, i) => {
+    const best = me?.scores[s.id];
+    const status = !best
+      ? `<span class="muted">${t("notTried")}</span>`
+      : `${best.score >= state.config.masteryScore ? `<span class="badge clear">${t("mastered")}</span> ` : ""}${t("best", { score: best.score })}${best.hintUsed ? " 💡" : ""}`;
+    return `
+      <div class="card ${best?.score === 100 ? "perfect" : ""}">
+        <div class="card-badges"><span class="badge q">Q${i + 1}</span>${s.cve ? ` <span class="badge cve">${esc(s.cve)}</span>` : ""}</div>
+        <h3>${esc(s.title)}</h3>
+        <p class="muted">${esc(s.summary)}</p>
+        <div>${topicBadges(s.topics)}</div>
+        <div class="actions">
+          <span>${status}</span>
+          <button class="primary" data-open="${esc(s.id)}">${t(running ? "play" : "contestReview")}</button>
+        </div>
+      </div>`;
+  };
+  const problems = c.scenarios.map(scenarioById).filter(Boolean);
+  view.innerHTML = `
+    <span class="badge contest">${t("contestMode")}</span>
+    <h1>${esc(c.title || t("contestDefaultTitle"))}</h1>
+    <div class="panel contest-head ${running ? "" : "done"}">
+      <div>
+        ${running ? `<div class="muted">${t("contestRemaining")}</div>` : ""}
+        <div class="timer" id="contest-timer"></div>
+        ${c.endsAt && running ? `<div class="muted">${t("adminEndsAt", { time: timeOf(c.endsAt) })}</div>` : ""}
+      </div>
+      <p>${running ? t("contestIntro", { n: problems.length }) : t("contestEndedIntro")}</p>
+    </div>
+    ${aclInfo("yourAcl")}
+    <h2>${t("contestProblems")}</h2>
+    <div class="grid">${problems.map(card).join("")}</div>
+    <h2>${t("contestBoard")}</h2>
+    <div id="contest-board">${contestBoardHtml(c, state.contestBoard)}</div>`;
+  view.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => showScenario(b.dataset.open)));
+  tickContestClock(document.getElementById("contest-timer"), () => showLobby());
+
+  // ランキングと競技の状態 (管理者による終了・延長) を定期的に読み直す
+  state.poller = setInterval(async () => {
+    const before = JSON.stringify(contest());
+    try { await refreshContest(); } catch { return; }
+    if (state.screen.name !== "lobby") return; // 読み込み中に別の画面へ移った
+    if (JSON.stringify(contest()) !== before) return showLobby();
+    document.getElementById("contest-board").innerHTML = contestBoardHtml(c, state.contestBoard);
+  }, 15000);
+
+  if (state.spectator) Mascot.say(tp("m_spectator"), "normal");
+  else if (running) Mascot.say(tp("m_contest"), "happy");
+  else Mascot.say(tp("m_contestEnded"), "happy");
+}
+
+// ---------- 管理者ページ ----------
+
+async function showAdmin() {
+  stopTimers();
+  setHash("admin");
+  state.screen = { name: "admin" };
+  state.prep = null;
+  if (!state.config.admin) {
+    view.innerHTML = `<h1>${t("adminTitle")}</h1><p class="error">${t("adminOnlyNote")}</p>`;
+    return;
+  }
+  try {
+    await refreshContest();
+  } catch (e) {
+    showError(e);
+    return;
+  }
+  const c = contest();
+  const send = async (method, path, body) => {
+    try {
+      await api(path, { method, body: body ? JSON.stringify(body) : undefined });
+    } catch (e) {
+      alert(e.message);
+    }
+    showAdmin();
+  };
+  if (c) {
+    const running = contestRunning(c);
+    view.innerHTML = `
+      <h1>${t("adminTitle")}</h1>
+      <div class="panel contest-head ${running ? "" : "done"}">
+        <div>
+          <span class="badge ${running ? "contest" : ""}">${t(running ? "adminRunning" : "adminEnded")}</span>
+          <h2>${esc(c.title || t("contestDefaultTitle"))}</h2>
+          <div class="timer" id="contest-timer"></div>
+        </div>
+        <div class="muted">
+          <div>${t("adminStartedAt", { time: timeOf(c.startedAt) })}</div>
+          ${c.endedAt ? `<div>${t("adminEndedAt", { time: timeOf(c.endedAt) })}</div>` : c.endsAt ? `<div>${t("adminEndsAt", { time: timeOf(c.endsAt) })}</div>` : ""}
+        </div>
+        <div class="start-buttons">
+          <button id="change-end">${t("adminChangeEnd")}</button>
+          ${running ? `<button class="danger" id="end-now">${t("adminEndNow")}</button>` : ""}
+          <button id="back-normal">${t("adminBackToNormal")}</button>
+        </div>
+      </div>
+      <h2>${t("contestProblems")}</h2>
+      <div class="panel"><ol>${c.scenarios.map((id) => `<li>${esc(scenarioById(id)?.title ?? id)}</li>`).join("")}</ol></div>
+      <h2>${t("contestBoard")}</h2>
+      <div id="contest-board">${contestBoardHtml(c, state.contestBoard)}</div>`;
+    tickContestClock(document.getElementById("contest-timer"), () => showAdmin());
+    state.poller = setInterval(async () => {
+      try { await refreshContest(); } catch { return; }
+      if (state.screen.name !== "admin") return;
+      document.getElementById("contest-board").innerHTML = contestBoardHtml(c, state.contestBoard);
+    }, 15000);
+    view.querySelector("#change-end").addEventListener("click", () => {
+      const input = prompt(t("adminChangeEndPrompt"), "30");
+      if (input === null) return;
+      const minutes = Number(input);
+      if (!Number.isInteger(minutes) || minutes < 0) return;
+      send("PATCH", "/api/admin/contest", { minutes });
+    });
+    view.querySelector("#end-now")?.addEventListener("click", () => {
+      if (confirm(t("adminEndConfirm"))) send("POST", "/api/admin/contest/end");
+    });
+    view.querySelector("#back-normal").addEventListener("click", () => {
+      if (confirm(t("adminBackConfirm"))) send("DELETE", "/api/admin/contest");
+    });
+    return;
+  }
+
+  // 通常モード: 出題する問題と制限時間を選んで競技を開始する
+  Mascot.say(tp("m_admin"), "normal");
+  const cloudFront = state.config.players.some((p) => p.cfWebAcl);
+  const group = (title, list) => !list.length ? "" : `
+    <fieldset class="panel pick">
+      <legend>${title} <button type="button" class="link" data-toggle>${t("adminToggleGroup")}</button></legend>
+      ${list.map((s) => {
+        const off = s.target === "cloudfront" && !cloudFront;
+        return `<label class="${off ? "muted" : ""}"><input type="checkbox" value="${esc(s.id)}" ${off ? "disabled" : ""}>
+          ${s.cve ? `<span class="badge cve">${esc(s.cve)}</span> ` : ""}${esc(s.title)}${off ? ` (${t("adminCloudFrontOff")})` : ""}</label>`;
+      }).join("")}
+    </fieldset>`;
+  view.innerHTML = `
+    <h1>${t("adminTitle")}</h1>
+    <p class="muted">${t("adminNormal")}</p>
+    <div class="panel admin-form">
+      <label>${t("adminContestName")}<input id="c-title" maxlength="60" placeholder="${esc(t("contestDefaultTitle"))}"></label>
+      <label>${t("adminMinutes")}<input id="c-minutes" type="number" min="0" max="1440" value="60"></label>
+    </div>
+    <h2>${t("adminSelect")} <span class="muted" id="c-count"></span></h2>
+    ${group(t("gameMode"), games())}
+    ${[1, 2, 3, 4].map((level) => group(t(`level${level}`), labs().filter((s) => s.level === level))).join("")}
+    ${group(t("ops"), opsDrills())}
+    ${group(t("exams"), exams())}
+    <div class="panel start-bar">
+      <div class="muted" id="c-count2"></div>
+      <button class="primary" id="c-start">${t("adminStart")}</button>
+    </div>`;
+  const boxes = () => [...view.querySelectorAll(".pick input:not(:disabled)")];
+  const chosen = () => boxes().filter((b) => b.checked).map((b) => b.value);
+  const count = () => {
+    const text = t("adminSelected", { n: chosen().length });
+    document.getElementById("c-count").textContent = text;
+    document.getElementById("c-count2").textContent = text;
+  };
+  view.querySelectorAll(".pick").forEach((f) => f.addEventListener("change", count));
+  view.querySelectorAll("[data-toggle]").forEach((b) => b.addEventListener("click", () => {
+    const inGroup = [...b.closest("fieldset").querySelectorAll("input:not(:disabled)")];
+    const on = !inGroup.every((x) => x.checked);
+    inGroup.forEach((x) => { x.checked = on; });
+    count();
+  }));
+  count();
+  view.querySelector("#c-start").addEventListener("click", () => {
+    const ids = chosen();
+    if (!ids.length) return alert(t("adminNeedOne"));
+    const minutes = Math.max(0, Math.floor(Number(document.getElementById("c-minutes").value) || 0));
+    if (!confirm(t("adminStartConfirm", { n: ids.length }))) return;
+    send("PUT", "/api/admin/contest", { title: document.getElementById("c-title").value.trim(), scenarios: ids, minutes });
+  });
+}
+
 // ---------- 段位と実績 ----------
 
 // 段位はチュートリアル以外のベストスコアの合計で決まる。最高段位 (師範) は WAF スペシャリスト。
@@ -261,7 +528,9 @@ function setHash(id) {
 
 function route() {
   const id = decodeURIComponent(location.hash.replace(/^#\/?/, ""));
-  if (id && state.config.scenarios.some((s) => s.id === id)) return showScenario(id);
+  if (id === "admin") return showAdmin();
+  // 競技中は、出題された問題だけを開ける
+  if (id && state.config.scenarios.some((s) => s.id === id) && (!contest() || inContest(id))) return showScenario(id);
   return showLobby();
 }
 
@@ -275,6 +544,8 @@ async function showLobby() {
   state.screen = { name: "lobby" };
   state.prep = null;
   try {
+    await refreshContest();
+    if (contest()) return showContestLobby();
     state.leaderboard = await api("/api/leaderboard");
   } catch (e) {
     showError(e);
@@ -400,6 +671,12 @@ async function showLobby() {
 
   view.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => showScenario(b.dataset.open)));
 
+  // 管理者が競技を始めたら、競技の画面に切り替える
+  state.poller = setInterval(async () => {
+    try { await refreshContest(); } catch { return; }
+    if (contest() && state.screen.name === "lobby") showLobby();
+  }, 20000);
+
   // まもりんの案内: お祝いがなければ、次のおすすめを話す
   if (state.spectator) {
     Mascot.say(tp("m_spectator"), "normal");
@@ -436,8 +713,10 @@ async function showScenario(id) {
     showError(e);
     return;
   }
+  const c = contest();
   if (state.prep?.id !== id) {
-    state.prep = { id, deadline: s.prepSeconds ? Date.now() + s.prepSeconds * 1000 : 0, hintUsed: false };
+    // 競技中は準備時間で自動的に攻撃を始めない (競技の残り時間を出す)
+    state.prep = { id, deadline: s.prepSeconds && !c ? Date.now() + s.prepSeconds * 1000 : 0, hintUsed: false };
   }
   const prep = state.prep;
   const fill = (x) => esc(x).replaceAll("{region}", `<code>${esc(state.config.region)}</code>`).replaceAll("{acl}", `<code>${esc(currentAcl(s))}</code>`);
@@ -460,9 +739,11 @@ async function showScenario(id) {
   const conditions = s.conditions?.length
     ? `<h2>${t(s.level === 3 ? "conditionsL3" : "conditions")}</h2><div class="panel">${s.conditions.map((p) => `<p>${esc(p)}</p>`).join("")}</div>`
     : "";
-  const solution = s.hasSolution && attempted
+  const solutionOpen = c ? !contestRunning(c) : attempted;
+  const solution = s.hasSolution && solutionOpen
     ? `<div class="panel" id="solution"><button id="show-solution">${t("showSolution")}</button></div>`
-    : "";
+    : c && s.hasSolution ? `<p class="muted">${t("contestSolutionLater")}</p>` : "";
+  const canStart = !state.spectator && (!c || contestRunning(c));
   const lesson = s.lesson
     ? `<h2>${t("lesson")}</h2><div class="panel lesson">${s.lesson.map((p) => `<p>${fill(p).replace(/^【(.+?)】/, "<strong>$1</strong><br>")}</p>`).join("")}</div>`
     : "";
@@ -487,11 +768,13 @@ async function showScenario(id) {
     ${solution}
     <div class="panel start-bar">
       <div>
-        ${prep.deadline ? `<div class="muted">${t("prepRemaining")}</div><div class="timer" id="timer"></div>` : `<div class="muted">${t("startPrompt")}</div>`}
+        ${c && !contestRunning(c) ? `<div class="muted">${t("contestEndedStart")}</div>`
+          : c ? `<div class="muted">${t("contestRemaining")}</div><div class="timer" id="contest-timer"></div>`
+          : prep.deadline ? `<div class="muted">${t("prepRemaining")}</div><div class="timer" id="timer"></div>` : `<div class="muted">${t("startPrompt")}</div>`}
       </div>
       <div class="start-buttons">
-        ${s.recon ? `<button id="recon" ${state.spectator ? "disabled" : ""}>${t("recon")}</button>` : ""}
-        <button class="primary" id="start" ${state.spectator ? "disabled" : ""}>${t(prep.deadline ? "startReady" : "start")}</button>
+        ${s.recon ? `<button id="recon" ${canStart ? "" : "disabled"}>${t("recon")}</button>` : ""}
+        <button class="primary" id="start" ${canStart ? "" : "disabled"}>${t(prep.deadline ? "startReady" : "start")}</button>
       </div>
     </div>`;
 
@@ -507,6 +790,8 @@ async function showScenario(id) {
   const start = () => startRun(s, prep.hintUsed, false);
   view.querySelector("#start").addEventListener("click", start);
 
+  const contestTimer = document.getElementById("contest-timer");
+  if (contestTimer) tickContestClock(contestTimer, () => showScenario(s.id));
   if (prep.deadline && !state.spectator) {
     const timerEl = document.getElementById("timer");
     const tick = () => {
@@ -648,7 +933,8 @@ function showResult(s, run) {
       <table><thead><tr><th>${t("colType")}</th><th>${t("colRequest")}</th><th class="num">${t("colBlocked")}</th><th>${t("colVerdict")}</th></tr></thead><tbody>${rows}</tbody></table>
       <p class="muted">${t("formula")}</p>
     </div>
-    ${s.hasSolution ? `<div class="panel" id="solution"><button id="show-solution">${t("showSolution")}</button></div>` : ""}
+    ${s.hasSolution && !contestRunning() ? `<div class="panel" id="solution"><button id="show-solution">${t("showSolution")}</button></div>` : ""}
+    ${s.hasSolution && contestRunning() ? `<p class="muted">${t("contestSolutionLater")}</p>` : ""}
     <button class="primary" data-retry>${t("retry")}</button>
     <button data-nav="lobby">${t("toStages")}</button>`;
   view.querySelector("[data-retry]").addEventListener("click", () => showScenario(s.id));
@@ -675,6 +961,8 @@ function applyStaticTexts() {
   document.documentElement.lang = state.lang;
   document.getElementById("player-label").textContent = t("player");
   document.getElementById("lang-label").textContent = t("language");
+  const adminLink = document.querySelector(".admin-link");
+  if (adminLink) adminLink.textContent = t("adminLink");
   Mascot.rename(tp("mascotName"), tp("mascotToggle"));
 }
 
@@ -692,6 +980,7 @@ async function setLang(lang) {
   const sc = state.screen;
   if (sc.name === "lobby") return showLobby();
   if (sc.name === "scenario") return showScenario(sc.id);
+  if (sc.name === "admin") return showAdmin();
   try {
     const s = await api(`/api/scenarios/${encodeURIComponent(sc.id)}`);
     if (sc.name === "running") showRunning(s, sc.run);
@@ -721,13 +1010,17 @@ langSelect.addEventListener("change", () => setLang(langSelect.value));
 window.addEventListener("popstate", () => route());
 
 // 配られた URL (?player=...&token=...) で開いたら、トークンを保存してアドレスバーから消す
+// 管理者用の URL (?admin=...) で開いたら、管理者のトークンも同じように保存する
 function takeTokenFromUrl() {
   const params = new URLSearchParams(location.search);
   const token = params.get("token");
-  if (!token) return;
-  storageSet("wafdy.token", token);
+  const admin = params.get("admin");
+  if (!token && !admin) return;
+  if (token) storageSet("wafdy.token", token);
+  if (admin) storageSet("wafdy.admin", admin);
   if (params.get("player")) storageSet("wafdy.player", params.get("player"));
   params.delete("token");
+  params.delete("admin");
   params.delete("player");
   const query = params.toString();
   history.replaceState(null, "", location.pathname + (query ? `?${query}` : "") + location.hash);
@@ -752,6 +1045,14 @@ function takeTokenFromUrl() {
   const langs = (state.config.langs || Object.keys(I18N)).filter((l) => I18N[l]);
   langSelect.innerHTML = langs.map((l) => `<option value="${esc(l)}">${esc(LANG_NAMES[l] || l)}</option>`).join("");
   langSelect.value = state.lang;
+  state.clockOffset = state.config.now - Date.now();
+
+  // 管理者には、ヘッダーに管理者ページへのリンクを出す
+  if (state.config.admin) {
+    const link = Object.assign(document.createElement("a"), { className: "admin-link", href: "#/admin", textContent: t("adminLink") });
+    link.addEventListener("click", (e) => { e.preventDefault(); showAdmin(); });
+    document.querySelector(".pickers").prepend(link);
+  }
 
   if (state.config.requireToken) {
     // 複数人で遊ぶ設定: プレイヤーはトークンで決まり、選び直せない

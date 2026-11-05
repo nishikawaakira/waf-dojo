@@ -51,6 +51,17 @@ type Request struct {
 	TLS      tlsprofile.Name
 	// Chunked なら Transfer-Encoding: chunked で (Content-Length なしで) 送る。
 	Chunked bool
+	// Fold は旧来の行折り返し (obs-fold) で送るヘッダー: 「Name: Base\r\n\t<Payload>」。
+	// CloudFront に届くと継続行 (Payload) はヘッダーの「キー」位置に入るため、Single header や
+	// Match scope = Values のルールでは Payload を検査できず、All (キー+値) でだけ見える。
+	Fold *FoldedHeader
+}
+
+// FoldedHeader は obs-fold で送るヘッダー。Base が 1 行目の値、Payload が折り返した継続行。
+type FoldedHeader struct {
+	Name    string
+	Base    string
+	Payload string
 }
 
 func (r Request) TLSProfile() tlsprofile.Name {
@@ -345,6 +356,13 @@ func (r Request) WAFView() wafrule.Request {
 	} else if r.Body != "" {
 		w.Headers = append(w.Headers, [2]string{"Content-Length", fmt.Sprint(len(r.Body))})
 	}
+	if r.Fold != nil {
+		// CloudFront では、折り返した継続行がヘッダーの「キー」位置に入る (実機で確認)。
+		// Single header の値は Base のまま、Values スコープにも Payload は現れない。
+		w.Headers = append(w.Headers,
+			[2]string{r.Fold.Name, r.Fold.Base},
+			[2]string{r.Fold.Payload, ""})
+	}
 	w.Headers = append(w.Headers, [2]string{"X-Forwarded-For", r.ClientIP}, [2]string{"Accept-Encoding", "gzip"})
 	return w
 }
@@ -363,6 +381,10 @@ func FormatRequest(req Request) string {
 		if req.Headers[k] != "" {
 			fmt.Fprintf(&b, "%s: %s\n", k, req.Headers[k])
 		}
+	}
+	if req.Fold != nil {
+		// 継続行はタブ始まりで折り返す (obs-fold)。
+		fmt.Fprintf(&b, "%s: %s\n\t%s\n", req.Fold.Name, req.Fold.Base, req.Fold.Payload)
 	}
 	if req.ClientIP != "" {
 		fmt.Fprintf(&b, "X-Forwarded-For: %s\n", req.ClientIP)

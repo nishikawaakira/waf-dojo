@@ -4,14 +4,18 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"math/rand/v2"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -225,6 +229,10 @@ func (r *smallChunkReader) Read(p []byte) (int, error) {
 // x-amzn-waf-action ヘッダーは Challenge / CAPTCHA とみなす。
 // ただし 400 は ALB が不正なリクエストとして WAF より前に断ったものなので、ブロックとは数えない。
 func send(ctx context.Context, target string, r scenario.Request) (bool, error) {
+	if r.Fold != nil {
+		// 行折り返し (obs-fold) は Go の HTTP クライアントが送れないので、生の接続に直接書く。
+		return sendRawFold(ctx, target, r)
+	}
 	req, err := newRequest(ctx, target, r)
 	if err != nil {
 		return false, err
@@ -234,6 +242,66 @@ func send(ctx context.Context, target string, r scenario.Request) (bool, error) 
 		return false, err
 	}
 	resp.Body.Close()
+	return blocked(resp)
+}
+
+// sendRawFold は obs-fold ヘッダーを含むリクエストを生の接続に直接書いて送る。
+// Go の net/http はヘッダー値に改行を許さないため、折り返しはこの経路でしか送れない。
+func sendRawFold(ctx context.Context, target string, r scenario.Request) (bool, error) {
+	u, err := url.Parse(target + r.Target())
+	if err != nil {
+		return false, err
+	}
+	port := u.Port()
+	if port == "" {
+		if u.Scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+	addr := net.JoinHostPort(u.Hostname(), port)
+	d := &net.Dialer{Timeout: 10 * time.Second}
+	var conn net.Conn
+	if u.Scheme == "https" {
+		conn, err = tls.DialWithDialer(d, "tcp", addr, &tls.Config{ServerName: u.Hostname()})
+	} else {
+		conn, err = d.DialContext(ctx, "tcp", addr)
+	}
+	if err != nil {
+		return false, err
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(10 * time.Second))
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s %s HTTP/1.1\r\n", r.MethodOrGet(), u.RequestURI())
+	fmt.Fprintf(&b, "Host: %s\r\n", u.Host)
+	for k, v := range r.Headers {
+		if v != "" {
+			fmt.Fprintf(&b, "%s: %s\r\n", k, v)
+		}
+	}
+	// obs-fold: 継続行をタブ始まりで折り返す。
+	fmt.Fprintf(&b, "%s: %s\r\n\t%s\r\n", r.Fold.Name, r.Fold.Base, r.Fold.Payload)
+	fmt.Fprintf(&b, "X-Forwarded-For: %s\r\n", r.ClientIP)
+	b.WriteString("Connection: close\r\n\r\n")
+	if _, err := io.WriteString(conn, b.String()); err != nil {
+		return false, err
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		return false, err
+	}
+	resp.Body.Close()
+	return blocked(resp)
+}
+
+// blocked は応答から WAF にブロックされたかどうかを判定する。
+// ダミーアプリは常に 200 を返すので、4xx は WAF の Block / CAPTCHA、
+// x-amzn-waf-action ヘッダーは Challenge / CAPTCHA とみなす。
+// ただし 400 は ALB が不正なリクエストとして WAF より前に断ったものなので、ブロックとは数えない。
+func blocked(resp *http.Response) (bool, error) {
 	if resp.Header.Get("x-amzn-waf-action") != "" {
 		return true, nil
 	}

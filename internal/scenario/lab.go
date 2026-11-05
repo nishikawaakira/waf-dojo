@@ -25,6 +25,7 @@ func registerLabs() {
 	registerLabCVEs()
 	registerLabAdvisories()
 	registerLabTuning()
+	registerLabHeaderFold()
 	registerExams()
 	registerOpsDrills()
 }
@@ -43,6 +44,13 @@ func withBody(req Request, contentType, body string) Request {
 // asChunked は、長さを宣言せず Transfer-Encoding: chunked で送るリクエストにする。
 func asChunked(req Request) Request {
 	req.Chunked = true
+	return req
+}
+
+// withFold は、ヘッダー name を「name: base\r\n\t<payload>」と行折り返し (obs-fold) で送る。
+// CloudFront に届くと payload はヘッダーのキー位置に入り、Values スコープの検査では見えなくなる。
+func withFold(req Request, name, base, payload string) Request {
+	req.Fold = &FoldedHeader{Name: name, Base: base, Payload: payload}
 	return req
 }
 

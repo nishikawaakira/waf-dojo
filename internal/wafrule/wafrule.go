@@ -276,3 +276,8 @@ func AllHeaderValues() FieldToMatch {
 func AllHeaderKeys() FieldToMatch {
 	return FieldToMatch{Headers: &Headers{MatchPattern: HeaderMatchPattern{All: &empty{}}, MatchScope: "KEY", OversizeHandling: "CONTINUE"}}
 }
+
+// AllHeaders はすべてのヘッダーの名前と値の両方を検査対象にする (Match scope = All)。
+func AllHeaders() FieldToMatch {
+	return FieldToMatch{Headers: &Headers{MatchPattern: HeaderMatchPattern{All: &empty{}}, MatchScope: "ALL", OversizeHandling: "CONTINUE"}}
+}

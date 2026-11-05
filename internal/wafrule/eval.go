@@ -19,6 +19,12 @@ type Request struct {
 	JA4      string
 	// BodyLimit は WAF が検査できる Body の大きさ。0 なら ALB の 8 KB。
 	BodyLimit int
+	// Chunked は Transfer-Encoding: chunked で送られたリクエスト。長さが宣言されないため、
+	// WAF は先頭 (ほぼ上限まで) をデコードした分を Body 全体だと誤認し、上限を超えたと判定しない。
+	// このため Oversize handling (MATCH / NO_MATCH) が働かず、上限より後ろに置かれた中身は検査されない。
+	// (実機の ALB では、Body を小さなチャンク (1 つ約 15 バイト以下) に刻んだときに起きる。ここでは
+	// その挙動を単純化して、chunked なら常に上限未満に見えるものとして扱う。trafficgen は小さく刻んで送る。)
+	Chunked bool
 
 	labels map[string]bool // Web ACL の評価中に、前のルールが付けたラベル
 }
@@ -93,8 +99,9 @@ func (s *Statement) matches(req Request) (bool, error) {
 // anyValue はフィールドから値を取り出し、変換をかけてから、どれか 1 つでも一致すれば true を返す。
 // ヘッダーやクエリパラメータが存在しない場合は一致しない。
 func anyValue(req Request, f FieldToMatch, tt []TextTransformation, match func(string) (bool, error)) (bool, error) {
-	// Body が検査の上限を超えたら、Oversize handling に従う (CONTINUE なら先頭だけを検査する)
-	if f.Body != nil && len(req.Body) > req.bodyLimit() {
+	// Body が検査の上限を超えたら、Oversize handling に従う (CONTINUE なら先頭だけを検査する)。
+	// chunked のときは WAF が Body を上限未満だと誤認するので、Oversize handling は働かない。
+	if f.Body != nil && !req.Chunked && len(req.Body) > req.bodyLimit() {
 		switch f.Body.OversizeHandling {
 		case "MATCH":
 			return true, nil

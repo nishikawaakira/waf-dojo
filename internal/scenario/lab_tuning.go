@@ -377,4 +377,96 @@ func registerLabTuning() {
 				"This is the Core rule set with no tuning. Attacks are stopped, but the internal webhook tool can't be used. Removing the rule group to fix that would drop all protection."),
 		},
 	})
+
+	// chunked (Transfer-Encoding) で Body のサイズ判定をすり抜ける問題。
+	marker := "PHP_SESSION_UPLOAD_PROGRESS"
+	uploadBody := func(padLen int) (string, string) {
+		body := "--wd\r\nContent-Disposition: form-data; name=\"file\"; filename=\"x.bin\"\r\n\r\n" +
+			padding(padLen) +
+			"\r\n--wd\r\nContent-Disposition: form-data; name=\"" + marker + "\"\r\n\r\n1\r\n--wd--\r\n"
+		return "multipart/form-data; boundary=wd", body
+	}
+	chunkedAttack := func(r *rand.Rand, path string, padLen int) Request {
+		ct, body := uploadBody(padLen)
+		return asChunked(atk(r, withBody(post(r, path, ""), ct, body)))
+	}
+	lab(4, &Scenario{
+		ID:    "lab-4-chunked-size-bypass",
+		CVE:   "Body inspection limit (chunked)",
+		Title: T("chunked で 8 KB の壁をすり抜ける", "Chunked requests slip past the 8 KB wall"),
+		Summary: T("勧告どおり「8 KB を超える Body をブロック」したのに、攻撃がすり抜けました。攻撃は Transfer-Encoding: chunked で送られていました。",
+			"You blocked bodies over 8 KB as the advisory said, yet the attack got through. It was sent with Transfer-Encoding: chunked."),
+		Topics: []Text{T("Transfer-Encoding: chunked", "Transfer-Encoding: chunked"), T("Body のサイズ判定の回避", "Bypassing body-size checks"), T("長さを宣言しないリクエスト", "Requests with no declared length")},
+		Briefing: []Text{
+			T("あるアップロード機能を悪用する脆弱性が出ました。攻撃は、アップロードの Body に特定のフィールド (ここでは PHP_SESSION_UPLOAD_PROGRESS) を混ぜて送ります。勧告には「そのフィールドを含む Body や、8 KB を超える大きな Body をブロックせよ」とありました。",
+				"A vulnerability abusing an upload feature is out. The attack mixes a specific field (here, PHP_SESSION_UPLOAD_PROGRESS) into the upload body. The advisory said to block bodies containing that field, or bodies larger than 8 KB."),
+			T("あなたは ALB に付けた WAF で、そのとおりに設定しました。ところが、攻撃が記録に残りました。攻撃のリクエストには Content-Length がなく、代わりに Transfer-Encoding: chunked が付いていました。",
+				"You configured exactly that on the WAF attached to your ALB. Yet an attack showed up in the logs. The attack request had no Content-Length; instead it carried Transfer-Encoding: chunked."),
+			T("chunked は Body の長さを先に宣言しない送り方です。ALB に直接届いた chunked のリクエストでは、WAF は Body の先頭 (ほぼ 8 KB 分) をデコードした量を「Body 全体」だと誤認し、8 KB を超えていないと判定します。このため、サイズ判定 (Oversize handling の MATCH) も、8 KB より後ろに置かれたフィールドの検査も、どちらも働きません。",
+				"Chunked is a way to send a body without declaring its length up front. For a chunked request that reaches the ALB directly, WAF mistakes the decoded first part (roughly 8 KB) for the whole body and decides it isn't over 8 KB. So neither the size check (Oversize handling MATCH) nor inspection of a field placed beyond 8 KB fires."),
+		},
+		Conditions: []Text{
+			T("この問題は AWS 実機で検証しています: ALB に直接届く HTTP/1.1 の chunked を小さなチャンク (1 つ約 15 バイト以下) に刻んで送ると、WAF が認識する Body サイズが 8 KB 未満になり、サイズ判定 (Oversize handling の MATCH) も先頭 8 KB より後ろの検査もすり抜けます。チャンクを大きく (約 16 バイト以上) すると正しく数えられて止まります。HTTP/2 や、前段に CloudFront がある場合は常に正しい大きさで判定され、すり抜けません。",
+				"Verified on real AWS: when HTTP/1.1 chunked reaching the ALB directly is split into small chunks (each ~15 bytes or less), the body size WAF sees drops below 8 KB, so both the size check (Oversize handling MATCH) and inspection beyond the first 8 KB are bypassed. With larger chunks (~16 bytes or more) the true size is counted and it is blocked. With HTTP/2, or with CloudFront in front, the true size is always used and there is no bypass."),
+			T("この店は普通のアップロードを POST /upload で受け、Content-Length を付けて送ってきます。ストリーミング用の POST /api/stream だけは、正規の利用でも chunked で送られます。",
+				"The shop receives normal uploads at POST /upload with a Content-Length. Only the streaming endpoint POST /api/stream legitimately uses chunked."),
+		},
+		Lesson: []Text{
+			T("【chunked とは】HTTP/1.1 でリクエストの Body を送る方法は 2 つあります。Content-Length で長さを先に宣言する方法と、Transfer-Encoding: chunked で小分けに送り長さを宣言しない方法です。普通のブラウザのフォームやアップロードは Content-Length を付けます。chunked は、大きさが事前に分からないデータ (ストリーミングのアップロードなど) で使われます。",
+				"【What chunked is】HTTP/1.1 has two ways to send a request body: declare the length up front with Content-Length, or send it in pieces with Transfer-Encoding: chunked and declare no length. Normal browser forms and uploads use Content-Length. Chunked is used for data whose size isn't known in advance, such as streaming uploads."),
+			T("【なぜサイズ判定が効かないか】WAF はボディ全体の長さを知って初めて「上限を超えた」と判定できます。chunked には長さの宣言がなく、ALB は先頭 (ほぼ 8 KB 分) だけを WAF に渡します。WAF はそれを Body 全体だと誤認するので、常に「上限未満」に見え、Oversize handling が働きません。",
+				"【Why the size check fails】WAF can only judge \"over the limit\" once it knows the full body length. Chunked declares no length, and the ALB hands WAF only the first part (roughly 8 KB). WAF mistakes that for the whole body, so it always looks \"under the limit\" and Oversize handling never fires."),
+			T("【見分け方】chunked のリクエストには Transfer-Encoding ヘッダーが付きます。サイズや中身ではなく、この「ヘッダーの有無」で見分けます。Content-Length を見る判定では、Content-Length が無い chunked をすり抜けられてしまいます。",
+				"【How to tell】A chunked request carries a Transfer-Encoding header. Detect it by that header's presence, not by size or content. A check that looks at Content-Length can be bypassed by chunked, which has none."),
+			T("【設計の考え方】前段に CloudFront を置くと、CloudFront が Body を整えてオリジンに渡すため、この回避は塞がれます (CloudFront は本来の大きさを把握します)。CloudFront を使わない構成では、ALB の WAF で「Transfer-Encoding のあるリクエストを止める (正規に chunked を使う経路だけ例外にする)」ルールが必要です。",
+				"【Design thinking】Putting CloudFront in front closes this bypass, because CloudFront normalizes the body before forwarding to the origin (it knows the true size). Without CloudFront, WAF on the ALB needs a rule that blocks requests carrying Transfer-Encoding, with an exception only for paths that legitimately use chunked."),
+		},
+		Hints: []Text{
+			T("Body のサイズや中身を見るルールでは chunked を捕まえられません。Transfer-Encoding ヘッダーが「存在するか」で判定しましょう (Single header の Size >= 0)。",
+				"A rule that looks at body size or content can't catch chunked. Decide by whether the Transfer-Encoding header is present (a single-header Size >= 0)."),
+			T("正規の chunked を使う POST /api/stream まで止めないよう、AND NOT で例外にします。",
+				"Exempt POST /api/stream, which legitimately uses chunked, with AND NOT."),
+		},
+		Patterns: []Pattern{
+			{Attack, T("chunked で 9 KB の後ろに隠したフィールド", "Field hidden after 9 KB, sent chunked"), 12, func(r *rand.Rand) Request {
+				return chunkedAttack(r, "/upload", 9*1024)
+			}},
+			{Attack, T("chunked で 12 KB の後ろに隠したフィールド", "Field hidden after 12 KB, sent chunked"), 12, func(r *rand.Rand) Request {
+				return chunkedAttack(r, "/comment", 12*1024)
+			}},
+			{Attack, T("chunked で 20 KB の後ろに隠したフィールド", "Field hidden after 20 KB, sent chunked"), 12, func(r *rand.Rand) Request {
+				return chunkedAttack(r, "/upload", 20*1024)
+			}},
+			{Benign, T("Content-Length 付きの大きな正規アップロード", "Large legitimate uploads with Content-Length"), 20, func(r *rand.Rand) Request {
+				ct, body := multipartUpload("manual.pdf", randomText(r, 20000))
+				return withBody(post(r, "/upload", ""), ct, body)
+			}},
+			{Benign, T("正規の chunked ストリーミング (/api/stream)", "Legitimate chunked streaming (/api/stream)"), 15, func(r *rand.Rand) Request {
+				return asChunked(withBody(post(r, "/api/stream", ""), "application/octet-stream", randomText(r, 20000)))
+			}},
+			{Benign, lblBrowse, 15, browse},
+		},
+		Solution: w.Block("block-chunked-except-stream", w.And(
+			w.Present(w.Header("transfer-encoding")),
+			w.Not(w.StartsWith("/api/stream", w.UriPath(), w.Lowercase)),
+		)),
+		SolutionNote: []Text{
+			T("Transfer-Encoding ヘッダーが「存在する」リクエストをブロックします (Inspect: Single header = transfer-encoding、Match type: Size greater than or equal to 0)。chunked のリクエストは必ずこのヘッダーを持つので、サイズや中身を見なくても確実に捕まえられます。",
+				"Block requests where the Transfer-Encoding header is present (Inspect: Single header = transfer-encoding, Match type: Size greater than or equal to 0). Chunked requests always carry this header, so you catch them reliably without looking at size or content."),
+			T("正規に chunked を使う POST /api/stream は AND NOT で例外にします。普通のアップロード (POST /upload) は Content-Length で送られるのでこのルールには当たらず、そのまま通ります。",
+				"Exempt POST /api/stream, which legitimately uses chunked, with AND NOT. Normal uploads (POST /upload) are sent with Content-Length, so they don't match this rule and pass."),
+			T("より確実なのは、ALB の前に CloudFront を置き、CloudFront に WAF を付けることです。CloudFront が Body を整えて渡すため、chunked でも本来の大きさで判定され、サイズ判定がそのまま効きます。",
+				"A more robust option is to put CloudFront in front of the ALB and attach WAF to CloudFront. CloudFront normalizes the body, so even chunked requests are judged by their true size and the size check works as intended."),
+		},
+		// 勧告どおり「目印を含む Body」と「8 KB を超える Body」をブロック (Oversize handling = MATCH で、
+		// 上限を超えた Body はそれだけで一致する)。/upload は大きな正規アップロードのため例外。
+		Pitfall: w.Block("pitfall-size-and-marker", w.And(
+			w.Contains(marker, w.BodyFieldOversize("MATCH")),
+			w.Not(w.StartsWith("/upload", w.UriPath(), w.Lowercase)),
+		)),
+		PitfallNote: []Text{
+			T("勧告どおり「フィールドを含む Body」と「8 KB を超える Body」を Oversize handling = MATCH でブロックし、大きな正規アップロードの /upload を例外にした状態です。Content-Length 付きの攻撃なら止まりますが、chunked の攻撃は Body が 8 KB 未満に見えるため、サイズ判定もフィールドの検査もすり抜けます。",
+				"As the advisory said, this blocks bodies containing the field and bodies over 8 KB with Oversize handling MATCH, exempting /upload for large legitimate uploads. It stops Content-Length attacks, but chunked attacks look under 8 KB, so both the size check and the field inspection are bypassed."),
+		},
+	})
 }

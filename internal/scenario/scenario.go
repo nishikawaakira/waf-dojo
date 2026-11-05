@@ -49,6 +49,8 @@ type Request struct {
 	Body     string
 	ClientIP string
 	TLS      tlsprofile.Name
+	// Chunked なら Transfer-Encoding: chunked で (Content-Length なしで) 送る。
+	Chunked bool
 }
 
 func (r Request) TLSProfile() tlsprofile.Name {
@@ -336,7 +338,11 @@ func (r Request) WAFView() wafrule.Request {
 			w.Headers = append(w.Headers, [2]string{k, r.Headers[k]})
 		}
 	}
-	if r.Body != "" {
+	if r.Chunked {
+		// 長さを宣言しない送り方。WAF は Body を上限未満だと誤認する。
+		w.Chunked = true
+		w.Headers = append(w.Headers, [2]string{"Transfer-Encoding", "chunked"})
+	} else if r.Body != "" {
 		w.Headers = append(w.Headers, [2]string{"Content-Length", fmt.Sprint(len(r.Body))})
 	}
 	w.Headers = append(w.Headers, [2]string{"X-Forwarded-For", r.ClientIP}, [2]string{"Accept-Encoding", "gzip"})
@@ -360,6 +366,9 @@ func FormatRequest(req Request) string {
 	}
 	if req.ClientIP != "" {
 		fmt.Fprintf(&b, "X-Forwarded-For: %s\n", req.ClientIP)
+	}
+	if req.Chunked {
+		b.WriteString("Transfer-Encoding: chunked\n")
 	}
 	if req.Body != "" {
 		b.WriteString("\n" + req.Body + "\n")

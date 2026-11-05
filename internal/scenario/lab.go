@@ -40,6 +40,12 @@ func withBody(req Request, contentType, body string) Request {
 	return req
 }
 
+// asChunked は、長さを宣言せず Transfer-Encoding: chunked で送るリクエストにする。
+func asChunked(req Request) Request {
+	req.Chunked = true
+	return req
+}
+
 func postJSON(r *rand.Rand, path, body string) Request {
 	return withBody(post(r, path, ""), "application/json", body)
 }

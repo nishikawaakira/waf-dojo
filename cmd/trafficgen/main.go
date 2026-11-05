@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/rand/v2"
 	"net/http"
@@ -176,15 +177,47 @@ func run(ctx context.Context, target string, sc *scenario.Scenario) []score.Outc
 
 // newRequest は、シナリオのパスとクエリを書き換えずにそのまま送る HTTP リクエストを作る。
 func newRequest(ctx context.Context, target string, r scenario.Request) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, r.MethodOrGet(), target+r.Target(), strings.NewReader(r.Body))
+	var body io.Reader = strings.NewReader(r.Body)
+	if r.Chunked {
+		// 小さなチャンクに刻んで送る。実機の ALB は chunked を小さく刻むと Body のサイズを
+		// 上限未満だと誤認する (大きな 1 チャンクだと正しく数えてしまい、この回避は成立しない)。
+		body = &smallChunkReader{s: r.Body, n: 8}
+	}
+	req, err := http.NewRequestWithContext(ctx, r.MethodOrGet(), target+r.Target(), body)
 	if err != nil {
 		return nil, err
 	}
 	for k, v := range r.Headers {
 		req.Header.Set(k, v)
 	}
+	if r.Chunked {
+		// 長さを宣言せず Transfer-Encoding: chunked で送る (Content-Length を付けない)。
+		req.TransferEncoding = []string{"chunked"}
+		req.ContentLength = -1
+	}
 	req.Header.Set("X-Forwarded-For", r.ClientIP)
 	return req, nil
+}
+
+// smallChunkReader は Body を n バイトずつ返す。net/http はこの Read 単位で chunked の
+// チャンクを切るので、実機の ALB に「小さく刻んだ chunked」を届けられる。
+type smallChunkReader struct {
+	s string
+	i int
+	n int
+}
+
+func (r *smallChunkReader) Read(p []byte) (int, error) {
+	if r.i >= len(r.s) {
+		return 0, io.EOF
+	}
+	end := r.i + r.n
+	if end > len(r.s) {
+		end = len(r.s)
+	}
+	k := copy(p, r.s[r.i:end])
+	r.i += k
+	return k, nil
 }
 
 // send は WAF にブロックされたかどうかを返す。

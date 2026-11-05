@@ -72,7 +72,7 @@ Browser ── Lambda Function URL (gameapi: UI + API)                      │
 
 Rules you created in the tutorials stay in place, so in game mode they sometimes cause false positives (stages 4 and 5). You need to revisit existing rules, not just stop new attacks.
 
-### Vulnerability labs (41 challenges, no steps)
+### Vulnerability labs (42 challenges, no steps)
 
 Each challenge reads: "A new vulnerability is out. It can be blocked under these conditions. Write the rule." The goal is to be able to write your own rules whenever a new vulnerability appears. After one attempt you can see the model-answer rule JSON (ready to paste into the console's Rule JSON editor) and an explanation. Many Level 2 and 3 challenges also include a "common pitfall" rule and why it fails.
 
@@ -81,7 +81,7 @@ Each challenge reads: "A new vulnerability is out. It can be blocked under these
 | Level 1: Follow the advisory | Turn guidance that spells out what to inspect, how to match, and the exact strings into a precise rule | Log4Shell, Spring4Shell, Shellshock, Confluence OGNL, F5 BIG-IP iControl REST, Next.js middleware bypass, Apache HTTP Server traversal, Text4Shell, Metabase GeoJSON (CVE-2021-41277), ProxyLogon (CVE-2021-26855), Confluence Velocity (CVE-2023-22527) |
 | Level 2: Translate the advisory into WAF | Choose the inspected component, transformations, and match type yourself from prose conditions | PHP-CGI (CVE-2024-4577), Citrix ADC, FortiOS SSL-VPN, WebLogic console, Confluence setup, Spring Cloud Function, Struts 2 S2-045, vCenter vROps, XXE, GraphQL introspection, ProxyNotShell, CRLF injection, X-Original-URL, F5 BIG-IP TMUI (CVE-2020-5902), TeamCity (CVE-2024-27198) |
 | Level 3: Derive it from the PoC | No mitigation guidance. Find the essence of the attack and prepare for both variants and false positives | Obfuscated Log4Shell, SSRF (metadata), SSTI, OS command injection, prototype pollution, open redirect, file upload, PAN-OS GlobalProtect (CVE-2024-3400), reading original advisories: Ivanti Connect Secure (CVE-2023-46805 / CVE-2024-21887), GitLab (CVE-2023-7028) |
-| Level 4: Managed rules and WAF's limits | When a managed rule blocks legitimate traffic, fix it while keeping protection (per-rule Count override + label match). Prepare for WAF's own limits such as the body inspection limit | Core rule set SizeRestrictions_BODY (large uploads), NoUserAgent_HEADER (IoT devices), GenericRFI_QUERYARGUMENTS (an internal webhook tool), the 8 KB wall (body inspection limit and oversize handling; fixed at 8 KB on ALB), extending CloudFront's 16 KB wall to 64 KB (experienced live on the player's own CloudFront) |
+| Level 4: Managed rules and WAF's limits | When a managed rule blocks legitimate traffic, fix it while keeping protection (per-rule Count override + label match). Prepare for WAF's own limits such as the body inspection limit | Core rule set SizeRestrictions_BODY (large uploads), NoUserAgent_HEADER (IoT devices), GenericRFI_QUERYARGUMENTS (an internal webhook tool), the 8 KB wall (body inspection limit and oversize handling; fixed at 8 KB on ALB), extending CloudFront's 16 KB wall to 64 KB (experienced live on the player's own CloudFront), and the chunked bypass (a Transfer-Encoding: chunked request slips past the size check on an ALB; verified on real AWS) |
 
 What the challenges build:
 
@@ -96,7 +96,7 @@ Attack requests are harmless reproductions of the *shape* of real attacks, and e
 
 #### Quality assurance for the model answers
 
-- `go test ./...` checks that the model answers for all 46 lab, exam, and ops challenges block every attack and no legitimate request (the evaluator in `internal/wafrule` reproduces AWS WAF's matching locally).
+- `go test ./...` checks that the model answers for all 47 lab, exam, and ops challenges block every attack and no legitimate request (the evaluator in `internal/wafrule` reproduces AWS WAF's matching locally).
 - It also checks that each common-pitfall rule really does let attacks through or cause false positives.
 - The JSON of the model answers and pitfall rules has been syntax-checked with the AWS WAF CheckCapacity API.
 - On real AWS (ALB + WAF), every challenge has been confirmed to let attacks through with no rules and to score 100 with the model answer. ALB rejects with 400, before WAF, any path that climbs above the site root after one decode, so tests also make sure no such path is used. To re-check (no resources are created):
@@ -138,7 +138,7 @@ Tests that send variants of lab attacks you have not seen yet. Copying the lab m
 
 ### WAF specialist certification
 
-Clear every tutorial and score 80 or higher on all 52 other challenges (6 game, 41 lab, 3 exam, 2 ops) to be shown as a 🏅 WAF specialist in the lobby and on the leaderboard.
+Clear every tutorial and score 80 or higher on all 53 other challenges (6 game, 42 lab, 3 exam, 2 ops) to be shown as a 🏅 WAF specialist in the lobby and on the leaderboard.
 
 Add scenarios by calling `register(...)` (or `lab(level, ...)` for labs) in the files under `internal/scenario/`. If you also write a model answer for a lab, the tests verify its correctness automatically.
 

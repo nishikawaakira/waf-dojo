@@ -150,3 +150,33 @@ func TestCloudFrontBodyLimit(t *testing.T) {
 		}
 	}
 }
+
+func TestChunkedBypassesSizeAndOversize(t *testing.T) {
+	big := strings.Repeat("a", 20*1024)
+	hidden := big + "SECRET" // 8 KB より後ろに隠した目印
+
+	// Content-Length あり (Chunked=false): 上限超えの MATCH が効き、目印が後ろでも一致する
+	cl := Request{Path: "/upload", Body: hidden}
+	if ok, _ := Block("t", Contains("SECRET", BodyFieldOversize("MATCH"))).Matches(cl); !ok {
+		t.Error("content-length: oversized body should match with MATCH")
+	}
+
+	// chunked: WAF は Body を上限未満だと誤認するので、上限超えの MATCH も目印の検査もすり抜ける
+	ch := Request{Path: "/upload", Body: hidden, Chunked: true}
+	if ok, _ := Block("t", Contains("SECRET", BodyFieldOversize("MATCH"))).Matches(ch); ok {
+		t.Error("chunked: marker hidden beyond 8 KB should be invisible, and the body not treated as oversized")
+	}
+	// ただし先頭 8 KB 以内なら chunked でも見える
+	head := Request{Path: "/upload", Body: "SECRET" + big, Chunked: true}
+	if ok, _ := Block("t", Contains("SECRET", BodyFieldOversize("MATCH"))).Matches(head); !ok {
+		t.Error("chunked: marker within the first 8 KB should still be seen")
+	}
+	// 見分けるには Transfer-Encoding ヘッダーの有無
+	ch.Headers = [][2]string{{"Transfer-Encoding", "chunked"}}
+	if ok, _ := Block("t", Present(Header("transfer-encoding"))).Matches(ch); !ok {
+		t.Error("the Transfer-Encoding header should be detectable")
+	}
+	if ok, _ := Block("t", Present(Header("transfer-encoding"))).Matches(cl); ok {
+		t.Error("a content-length request has no Transfer-Encoding header")
+	}
+}

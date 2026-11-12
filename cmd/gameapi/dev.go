@@ -219,7 +219,7 @@ func runDev(addr string) {
 	mem := newMemStore()
 	a := &app{store: mem, lambda: devInvoker{mem}, players: []string{"player1", "player2"}, region: "ap-northeast-1", project: "wafdojo", cloudFront: true}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
+		body, _ := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 		req := events.LambdaFunctionURLRequest{RawPath: r.URL.Path, Body: string(body), Headers: map[string]string{}, QueryStringParameters: map[string]string{}}
 		req.RequestContext.HTTP.Method = r.Method
 		for k, v := range r.Header {
@@ -244,6 +244,16 @@ func runDev(addr string) {
 		}
 		io.WriteString(w, res.Body)
 	})
+	// 既定の http.Server はタイムアウトを持たず、Slowloris のような遅延接続に弱い。
+	// ローカル専用だが、明示的にタイムアウトを入れておく。
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	log.Printf("WAF Dojo dev server: http://%s", addr)
-	log.Fatal(http.ListenAndServe(addr, handler))
+	log.Fatal(srv.ListenAndServe())
 }

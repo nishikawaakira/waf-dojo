@@ -7,9 +7,15 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      aws-sdk:
+      # minor / patch はまとめて 1 PR にする。
+      # major はこのグループに該当しないので個別 PR になる（大きな変更は個別にレビュー）。
+      # セキュリティ更新は applies-to を付けていないため、常に個別・即時で出る。
+      go-minor-patch:
         patterns:
-          - "github.com/aws/*"
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # GitHub Actions の依存関係（ワークフローで使うアクション）
   - package-ecosystem: github-actions
@@ -17,3 +23,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"

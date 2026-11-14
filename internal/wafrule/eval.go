@@ -282,7 +282,7 @@ func jsDecode(s string) string {
 		switch n := s[i+1]; n {
 		case 'u':
 			if i+5 < len(s) {
-				if v, err := strconv.ParseUint(s[i+2:i+6], 16, 32); err == nil {
+				if v, err := strconv.ParseUint(s[i+2:i+6], 16, 16); err == nil {
 					b.WriteRune(rune(v))
 					i += 5
 					continue
